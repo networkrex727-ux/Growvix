@@ -1,0 +1,89 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and wallet information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "phone": { "type": "string", "description": "User phone number" },
+        "email": { "type": "string", "description": "User email address" },
+        "balance": { "type": "number", "description": "Current wallet balance" },
+        "totalIncome": { "type": "number", "description": "Total income earned" },
+        "todayIncome": { "type": "number", "description": "Income earned today" },
+        "referralCode": { "type": "string", "description": "Unique referral code" },
+        "referredBy": { "type": "string", "description": "UID of the referrer" },
+        "role": { "type": "string", "enum": ["user", "admin"], "description": "User role" },
+        "lastCheckIn": { "type": "string", "format": "date-time", "description": "Last daily check-in timestamp" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Account creation date" }
+      },
+      "required": ["uid", "phone", "email", "balance", "totalIncome", "todayIncome", "referralCode", "role", "createdAt"]
+    },
+    "Plan": {
+      "title": "Investment Plan",
+      "description": "Available VIP investment plans",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "price": { "type": "number" },
+        "dailyIncome": { "type": "number" },
+        "validityDays": { "type": "number" },
+        "imageUrl": { "type": "string" }
+      },
+      "required": ["id", "name", "price", "dailyIncome", "validityDays"]
+    },
+    "Investment": {
+      "title": "User Investment",
+      "description": "Active investments by users",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "planId": { "type": "string" },
+        "planName": { "type": "string" },
+        "dailyIncome": { "type": "number" },
+        "purchaseDate": { "type": "string", "format": "date-time" },
+        "expiryDate": { "type": "string", "format": "date-time" },
+        "lastIncomeClaimed": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["active", "expired"] },
+        "createdAt": { "type": "object" }
+      },
+      "required": ["userId", "planId", "purchaseDate", "expiryDate", "status"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Recharges, withdrawals, and income logs",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "amount": { "type": "number" },
+        "type": { "type": "string", "enum": ["recharge", "withdraw", "bonus", "income", "referral", "investment"] },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected", "completed"] },
+        "utr": { "type": "string" },
+        "paymentMethod": { "type": "string" },
+        "bankDetails": { "type": "object" },
+        "description": { "type": "string" },
+        "createdAt": { "type": "object" }
+      },
+      "required": ["userId", "amount", "type", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/plans/{planId}": {
+      "schema": "Plan",
+      "description": "Investment plans"
+    },
+    "/investments/{investmentId}": {
+      "schema": "Investment",
+      "description": "User investments"
+    },
+    "/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Financial transactions"
+    }
+  }
+}
