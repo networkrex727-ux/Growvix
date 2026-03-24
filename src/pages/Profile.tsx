@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { signOut } from 'firebase/auth';
 import { auth } from '../firebase';
 import { useAuth } from '../App';
-import { User, Wallet, ArrowUpCircle, ArrowDownCircle, Users, ShieldCheck, Info, Headset, LogOut, ChevronRight, Settings, TrendingUp } from 'lucide-react';
+import { User, Wallet, ArrowUpCircle, ArrowDownCircle, Users, ShieldCheck, Info, Headset, LogOut, ChevronRight, Settings, TrendingUp, Bell } from 'lucide-react';
 import { motion } from 'motion/react';
 
 const Profile: React.FC = () => {
@@ -21,6 +21,7 @@ const Profile: React.FC = () => {
 
   const menuItems = [
     { label: 'My Investments', icon: TrendingUp, path: '/my-investments', color: 'text-[#ff0000]' },
+    { label: 'Notifications', icon: Bell, path: '/notifications', color: 'text-red-500' },
     { label: 'Recharge History', icon: ArrowUpCircle, path: '/history?type=recharge', color: 'text-red-500' },
     { label: 'Withdraw History', icon: ArrowDownCircle, path: '/history?type=withdraw', color: 'text-blue-500' },
     { label: 'Invite Friends', icon: Users, path: '/team', color: 'text-orange-500' },
@@ -68,7 +69,7 @@ const Profile: React.FC = () => {
           </div>
           <div>
             <p className="text-xs text-gray-500 font-medium">Available Balance</p>
-            <p className="text-2xl font-black text-gray-800">₹{profile?.balance?.toFixed(2) || '0.00'}</p>
+            <p className="text-xl font-black text-gray-800 truncate max-w-[150px]">₹{profile?.balance?.toFixed(2) || '0.00'}</p>
           </div>
         </div>
         <div className="flex flex-col gap-2">

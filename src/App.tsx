@@ -4,6 +4,7 @@ import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import { UserProfile, UserRole } from './types';
+import { handleFirestoreError, OperationType } from './lib/error-handler';
 
 // Components
 import BottomNav from './components/BottomNav';
@@ -22,7 +23,11 @@ import About from './pages/About';
 import Rules from './pages/Rules';
 import MyInvestments from './pages/MyInvestments';
 import AdminDashboard from './pages/AdminDashboard';
+import AdminAddPlan from './pages/AdminAddPlan';
 import ForgotPassword from './pages/ForgotPassword';
+import Notifications from './pages/Notifications';
+import NotFound from './pages/NotFound';
+import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider } from './context/ToastContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { ShieldAlert } from 'lucide-react';
@@ -115,11 +120,14 @@ const AppLayout: React.FC = () => {
             <Route path="/about" element={<ProtectedRoute><About /></ProtectedRoute>} />
             <Route path="/rules" element={<ProtectedRoute><Rules /></ProtectedRoute>} />
             <Route path="/my-investments" element={<ProtectedRoute><MyInvestments /></ProtectedRoute>} />
+            <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
             <Route path="/admin" element={<ProtectedRoute adminOnly><AdminDashboard /></ProtectedRoute>} />
+            <Route path="/admin/add-plan" element={<ProtectedRoute adminOnly><AdminAddPlan /></ProtectedRoute>} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="/404" element={<NotFound />} />
+            <Route path="*" element={<Navigate to="/404" replace />} />
           </Routes>
         </motion.div>
       </AnimatePresence>
@@ -144,17 +152,7 @@ export default function App() {
           }
           setLoading(false);
         }, (error) => {
-          console.error('Profile fetch error:', {
-            error: error.message,
-            operationType: 'get',
-            path: `users/${firebaseUser.uid}`,
-            authInfo: {
-              userId: firebaseUser.uid,
-              email: firebaseUser.email,
-              emailVerified: firebaseUser.emailVerified,
-              isAnonymous: firebaseUser.isAnonymous,
-            }
-          });
+          handleFirestoreError(error, OperationType.GET, `users/${firebaseUser.uid}`);
           setLoading(false);
         });
         return () => unsubscribeProfile();
@@ -171,12 +169,14 @@ export default function App() {
   const isAdmin = profile?.role === UserRole.ADMIN || (user?.email && adminEmails.includes(user.email));
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, isAdmin }}>
-      <ToastProvider>
-        <Router>
-          <AppLayout />
-        </Router>
-      </ToastProvider>
-    </AuthContext.Provider>
+    <ErrorBoundary>
+      <AuthContext.Provider value={{ user, profile, loading, isAdmin }}>
+        <ToastProvider>
+          <Router>
+            <AppLayout />
+          </Router>
+        </ToastProvider>
+      </AuthContext.Provider>
+    </ErrorBoundary>
   );
 }

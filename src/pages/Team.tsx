@@ -2,12 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { collection, query, where, getDocs, onSnapshot, getDoc, doc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../App';
+import { useToast } from '../context/ToastContext';
 import { UserProfile, TeamStats, SystemSettings } from '../types';
 import { motion } from 'motion/react';
 import { Users, Copy, Share2, Award, TrendingUp, UserPlus } from 'lucide-react';
 
 const Team: React.FC = () => {
   const { profile, user } = useAuth();
+  const { showToast } = useToast();
   const [teamStats, setTeamStats] = useState<TeamStats>({
     teamSize: 0,
     totalTeamIncome: 0,
@@ -84,7 +86,7 @@ const Team: React.FC = () => {
   const copyReferralLink = () => {
     const link = `${websiteUrl}/register?ref=${profile?.referralCode}`;
     navigator.clipboard.writeText(link);
-    alert("Referral link copied!");
+    showToast("Referral link copied!", "success");
   };
 
   return (

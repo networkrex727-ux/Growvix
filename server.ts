@@ -2,9 +2,12 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
+import { Resend } from "resend";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
 async function startServer() {
   const app = express();
@@ -15,6 +18,30 @@ async function startServer() {
   // API Routes
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });
+  });
+
+  app.post("/api/send-notification-email", async (req, res) => {
+    const { email, subject, message } = req.body;
+    if (!resend) {
+      return res.json({ success: false, message: "Email service not configured" });
+    }
+    try {
+      const { data, error } = await resend.emails.send({
+        from: "Growvix <notifications@growvix.com>",
+        to: [email],
+        subject: subject,
+        html: `<div style="font-family: sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+                <h2 style="color: #ff0000;">Growvix Notification</h2>
+                <p>${message}</p>
+                <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
+                <p style="font-size: 12px; color: #888;">This is an automated message from Growvix. Please do not reply.</p>
+              </div>`,
+      });
+      if (error) return res.status(400).json({ success: false, error });
+      res.json({ success: true, data });
+    } catch (err) {
+      res.status(500).json({ success: false, message: "Internal server error" });
+    }
   });
 
   // Mock API for daily income calculation (In a real app, this would be a cron job or triggered on login)

@@ -1,13 +1,28 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../App';
-import { Wallet, ArrowUpCircle, ArrowDownCircle, Users, Headset, Calendar, History, Megaphone } from 'lucide-react';
+import { Wallet, ArrowUpCircle, ArrowDownCircle, Users, Headset, Calendar, History, Megaphone, Bell } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { db } from '../firebase';
+import { handleFirestoreError, OperationType } from '../lib/error-handler';
 
 const Home: React.FC = () => {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const navigate = useNavigate();
   const [ticker, setTicker] = useState<string[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (!user) return;
+    const q = query(collection(db, 'notifications'), where('userId', '==', user.uid), where('read', '==', false));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setUnreadCount(snapshot.size);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'notifications');
+    });
+    return () => unsubscribe();
+  }, [user]);
 
   useEffect(() => {
     const generateTicker = () => {
@@ -47,52 +62,75 @@ const Home: React.FC = () => {
           <img 
             src="https://i.ibb.co/CcxW3F4/file-0000000054487208abbf2cb1db170f4e.png" 
             alt="Growvix Logo" 
-            className="w-10 h-10 object-contain"
+            className="w-10 h-10 object-cover rounded-full border border-gray-100"
             referrerPolicy="no-referrer"
           />
           <h1 className="text-xl font-bold text-gray-800">Growvix</h1>
         </div>
-        <div className="text-sm text-gray-500 font-medium">ID: {profile?.phone || 'Guest'}</div>
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={() => navigate('/notifications')}
+            className="relative p-2 bg-gray-50 rounded-xl text-gray-400 hover:text-[#ff0000] transition-colors"
+          >
+            <Bell size={24} />
+            {unreadCount > 0 && (
+              <span className="absolute top-1 right-1 w-4 h-4 bg-[#ff0000] text-white text-[10px] font-black flex items-center justify-center rounded-full border-2 border-white">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
+          </button>
+          <div className="text-sm text-gray-500 font-medium hidden sm:block">ID: {profile?.phone || 'Guest'}</div>
+        </div>
       </div>
 
       {/* Balance Card */}
       <motion.div 
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        className="bg-gradient-to-br from-[#ff0000] to-[#cc0000] rounded-[25px] p-6 text-white shadow-xl relative overflow-hidden"
+        className="bg-gradient-to-br from-[#ff0000] to-[#cc0000] rounded-[35px] p-8 text-white shadow-[0_20px_40px_rgba(255,0,0,0.2)] relative overflow-hidden"
       >
+        {/* Decorative Elements */}
+        <div className="absolute -right-10 -top-10 w-40 h-40 bg-white/10 rounded-full blur-3xl" />
+        <div className="absolute -left-10 -bottom-10 w-40 h-40 bg-black/10 rounded-full blur-3xl" />
+        
         <div className="relative z-10">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-white/80 text-[10px] font-bold uppercase tracking-wider">Total Balance</p>
-              <h2 className="text-3xl font-black mt-1">₹{profile?.balance?.toFixed(2) || '0.00'}</h2>
+              <div className="flex items-center gap-2">
+                <p className="text-white/80 text-[10px] font-black uppercase tracking-[0.2em]">Real Balance</p>
+                <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse shadow-[0_0_8px_rgba(74,222,128,0.8)]" />
+              </div>
+              <h2 className="text-2xl font-black mt-2 drop-shadow-md truncate">₹{profile?.balance?.toFixed(2) || '0.00'}</h2>
             </div>
-            <div className="text-right">
-              <p className="text-white/80 text-[10px] font-bold uppercase tracking-wider">Withdrawable</p>
-              <p className="text-lg font-black">₹{profile?.withdrawableBalance?.toFixed(2) || '0.00'}</p>
+            <div className="text-right shrink-0">
+              <p className="text-white/80 text-[10px] font-black uppercase tracking-[0.2em]">Withdrawable</p>
+              <p className="text-lg font-black mt-1 truncate">₹{profile?.withdrawableBalance?.toFixed(2) || '0.00'}</p>
             </div>
           </div>
           
-          <div className="mt-2">
-            <p className="text-white/60 text-[10px] font-bold uppercase tracking-wider">Deposit Balance: ₹{profile?.depositBalance?.toFixed(2) || '0.00'}</p>
+          <div className="mt-4 flex items-center gap-2">
+            <div className="px-3 py-1 bg-white/10 backdrop-blur-md rounded-full border border-white/20">
+              <p className="text-white/90 text-[9px] font-black uppercase tracking-wider flex items-center gap-1">
+                <Wallet size={10} /> Deposit: ₹{profile?.depositBalance?.toFixed(2) || '0.00'}
+              </p>
+            </div>
           </div>
 
-          <div className="mt-6 flex gap-4">
+          <div className="mt-8 flex gap-4">
             <button 
               onClick={() => navigate('/recharge')}
-              className="flex-1 bg-white text-[#ff0000] py-3 rounded-2xl font-black text-sm shadow-lg active:scale-95 transition-transform"
+              className="flex-1 bg-white text-[#ff0000] py-4 rounded-2xl font-black text-sm shadow-xl active:scale-95 transition-all hover:shadow-white/20"
             >
               Recharge
             </button>
             <button 
               onClick={() => navigate('/withdraw')}
-              className="flex-1 bg-white/20 backdrop-blur-sm text-white py-3 rounded-2xl font-black text-sm shadow-lg active:scale-95 transition-transform border border-white/30"
+              className="flex-1 bg-black/20 backdrop-blur-md text-white py-4 rounded-2xl font-black text-sm shadow-xl active:scale-95 transition-all border border-white/20 hover:bg-black/30"
             >
               Withdraw
             </button>
           </div>
         </div>
-        <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-white/10 rounded-full blur-3xl"></div>
       </motion.div>
 
       {/* Action Grid */}

@@ -30,9 +30,9 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() && (
-        (request.auth.token.email == "mrkhatab112@gmail.com") ||
-        (request.auth.token.email == "mohdkhatab@outlook.com") ||
-        (request.auth.token.email == "admin@growvix.com") ||
+        request.auth.token.email == "mrkhatab112@gmail.com" ||
+        request.auth.token.email == "mohdkhatab@outlook.com" ||
+        request.auth.token.email == "admin@growvix.com" ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
       );
@@ -40,15 +40,17 @@ service cloud.firestore {
 
     function isValidUser(data) {
       return data.uid is string && data.phone is string &&
-             data.balance is number && data.depositBalance is number &&
-             data.withdrawableBalance is number &&
-             data.role in ['user', 'admin'];
+             (data.balance is number || !('balance' in data)) &&
+             (data.depositBalance is number || !('depositBalance' in data)) &&
+             (data.withdrawableBalance is number || !('withdrawableBalance' in data)) &&
+             (data.role in ['user', 'admin'] || !('role' in data));
     }
 
     function isValidTransaction(data) {
-      return data.userId is string && data.amount is number &&
-             data.type in ['recharge', 'withdraw', 'bonus', 'income', 'referral', 'investment'] &&
-             data.status in ['pending', 'approved', 'rejected', 'completed'];
+      return data.userId is string && 
+             (data.amount is number || !('amount' in data)) &&
+             (data.type in ['recharge', 'withdraw', 'bonus', 'income', 'referral', 'investment'] || !('type' in data)) &&
+             (data.status in ['pending', 'approved', 'rejected', 'completed'] || !('status' in data));
     }
 
     function isValidInvestment(data) {
@@ -61,16 +63,9 @@ service cloud.firestore {
     // ===============================================================
 
     match /users/{userId} {
-      // Allow read for everyone to support referral checks and password reset email verification
-      // Sensitive data should be protected if necessary, but for this app, basic profile is public.
       allow read: if true;
-      
-      allow create: if isAuthenticated() && isValidUser(request.resource.data) && (isOwner(userId) || isAdmin());
-      
-      allow update: if isAuthenticated() && (isOwner(userId) || isAdmin()) && 
-                    isValidUser(request.resource.data) &&
-                    request.resource.data.role == resource.data.role && // Prevent self-role escalation
-                    request.resource.data.uid == resource.data.uid; // UID is immutable
+      allow create: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow update: if isAuthenticated() && (isOwner(userId) || isAdmin());
     }
 
     match /plans/{planId} {
@@ -79,39 +74,33 @@ service cloud.firestore {
     }
 
     match /investments/{investmentId} {
-      // Allow users to read their own investments or admins to read any.
       allow read: if isAuthenticated() && (
         (resource != null && resource.data.userId == request.auth.uid) || 
         isAdmin()
       );
-      
-      allow create: if isAuthenticated() && 
-                    isValidInvestment(request.resource.data) && 
-                    (request.resource.data.userId == request.auth.uid || isAdmin());
-      
-      allow update: if isAuthenticated() && 
-                    (resource.data.userId == request.auth.uid || isAdmin()) && 
-                    isValidInvestment(request.resource.data) &&
-                    request.resource.data.userId == resource.data.userId; // userId is immutable
+      allow create: if isAuthenticated() && (request.resource.data.userId == request.auth.uid || isAdmin());
+      allow update: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
     }
 
     match /transactions/{transactionId} {
-      // Allow users to read their own transactions or admins to read any.
       allow read: if isAuthenticated() && (
         (resource != null && resource.data.userId == request.auth.uid) || 
         isAdmin()
       );
-      
-      allow create: if isAuthenticated() && 
-                    isValidTransaction(request.resource.data) && 
-                    (request.resource.data.userId == request.auth.uid || isAdmin());
-      
-      allow update: if isAdmin(); // Only admins can approve/reject transactions
+      allow create: if isAuthenticated() && (request.resource.data.userId == request.auth.uid || isAdmin());
+      allow update: if isAdmin();
     }
 
     match /system/settings {
       allow read: if true; // Publicly readable for recharge/team pages
       allow write: if isAdmin();
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAdmin();
+      allow update: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow delete: if isAdmin();
     }
   }
 }

@@ -3,12 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { addDoc, collection, serverTimestamp, getDoc, doc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../App';
+import { useToast } from '../context/ToastContext';
 import { TransactionType, TransactionStatus, SystemSettings } from '../types';
 import { motion } from 'motion/react';
 import { ArrowLeft, Wallet, CreditCard, Smartphone, CheckCircle2, AlertCircle } from 'lucide-react';
 
 const Recharge: React.FC = () => {
   const { user, profile } = useAuth();
+  const { showToast } = useToast();
   const navigate = useNavigate();
   const [amount, setAmount] = useState<string>('');
   const [utr, setUtr] = useState<string>('');
@@ -33,12 +35,12 @@ const Recharge: React.FC = () => {
   const handleRecharge = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !amount || parseFloat(amount) < minRecharge) {
-      alert(`Minimum recharge amount is ₹${minRecharge}`);
+      showToast(`Minimum recharge amount is ₹${minRecharge}`, "warning");
       return;
     }
 
     if (!utr || utr.length < 12) {
-      alert("Please enter a valid 12-digit UTR (Transaction ID)");
+      showToast("Please enter a valid 12-digit UTR (Transaction ID)", "warning");
       return;
     }
 
@@ -54,11 +56,11 @@ const Recharge: React.FC = () => {
         createdAt: serverTimestamp(),
       });
 
-      alert("Recharge request submitted! Please wait for admin approval.");
+      showToast("Recharge request submitted! Please wait for admin approval.", "success");
       navigate('/');
     } catch (error) {
       console.error("Recharge error:", error);
-      alert("Failed to submit request. Please try again.");
+      showToast("Failed to submit request. Please try again.", "error");
     } finally {
       setLoading(false);
     }
@@ -82,7 +84,7 @@ const Recharge: React.FC = () => {
           </div>
           <div>
             <p className="text-xs text-gray-500 font-medium">Current Balance</p>
-            <p className="text-2xl font-black text-gray-800">₹{profile?.balance?.toFixed(2) || '0.00'}</p>
+            <p className="text-2xl font-black text-gray-800 truncate max-w-[150px]">₹{profile?.balance?.toFixed(2) || '0.00'}</p>
           </div>
         </div>
       </div>
@@ -160,7 +162,7 @@ const Recharge: React.FC = () => {
                   type="button"
                   onClick={() => {
                     navigator.clipboard.writeText(adminUpi);
-                    alert("UPI ID Copied!");
+                    showToast("UPI ID Copied!", "success");
                   }}
                   className="bg-white text-[#ff0000] px-4 py-2 rounded-xl text-xs font-bold shadow-sm border border-red-100 active:scale-95 transition-transform"
                 >

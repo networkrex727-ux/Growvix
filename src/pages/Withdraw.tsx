@@ -71,12 +71,13 @@ const Withdraw: React.FC = () => {
       });
 
       // 2. Deduct Balance (Hold the amount)
-      await updateDoc(doc(db, 'users', user.uid), {
+      const userRef = doc(db, 'users', user.uid);
+      await updateDoc(userRef, {
         balance: increment(-withdrawAmount),
         withdrawableBalance: increment(-withdrawAmount),
       });
 
-      showToast("Withdrawal request submitted! Please wait for admin approval.", "success");
+      showToast(`Withdrawal request submitted! ₹${withdrawAmount} has been deducted from your balance and is pending approval.`, "success");
       navigate('/');
     } catch (error) {
       console.error("Withdrawal error:", error);
@@ -104,7 +105,7 @@ const Withdraw: React.FC = () => {
           </div>
           <div>
             <p className="text-xs text-gray-500 font-medium">Withdrawable Balance</p>
-            <p className="text-2xl font-black text-gray-800">₹{profile?.withdrawableBalance?.toFixed(2) || '0.00'}</p>
+            <p className="text-2xl font-black text-gray-800 truncate max-w-[150px]">₹{profile?.withdrawableBalance?.toFixed(2) || '0.00'}</p>
           </div>
         </div>
       </div>

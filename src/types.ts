@@ -42,12 +42,27 @@ export interface UserProfile {
   createdAt: string;
 }
 
+export interface FirebaseConfig {
+  apiKey: string;
+  authDomain: string;
+  projectId: string;
+  appId: string;
+  firestoreDatabaseId?: string;
+  storageBucket?: string;
+  messagingSenderId?: string;
+}
+
 export interface SystemSettings {
   adminUpi: string;
   websiteUrl: string;
   minWithdrawal: number;
   minRecharge: number;
   withdrawalFee: number;
+  supportTelegram?: string;
+  supportWhatsApp?: string;
+  supportEmail?: string;
+  supportChannel?: string;
+  customFirebase?: FirebaseConfig;
 }
 
 export interface Plan {
@@ -94,4 +109,14 @@ export interface TeamStats {
   lv1Count: number;
   lv2Count: number;
   lv3Count: number;
+}
+
+export interface Notification {
+  id: string;
+  userId: string;
+  title: string;
+  message: string;
+  type: 'info' | 'success' | 'warning' | 'error';
+  read: boolean;
+  createdAt: any;
 }

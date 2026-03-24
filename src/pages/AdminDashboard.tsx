@@ -1,11 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { collection, query, where, getDocs, onSnapshot, updateDoc, doc, increment, addDoc, serverTimestamp, setDoc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, onSnapshot, updateDoc, doc, increment, addDoc, serverTimestamp, setDoc, getDoc, deleteDoc, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
-import { Transaction, TransactionStatus, TransactionType, UserProfile, SystemSettings } from '../types';
+import { Transaction, TransactionStatus, TransactionType, UserProfile, SystemSettings, Notification, Plan, InvestmentStatus } from '../types';
+import { handleFirestoreError, OperationType } from '../lib/error-handler';
 import { motion, AnimatePresence } from 'motion/react';
-import { Settings, Users, ArrowUpCircle, ArrowDownCircle, CheckCircle2, XCircle, Clock, Search, Filter, ShieldAlert, ShieldCheck, Edit3, Save, Globe, Smartphone, Banknote } from 'lucide-react';
+import { Settings, Users, ArrowUpCircle, ArrowDownCircle, CheckCircle2, XCircle, Clock, Search, Filter, ShieldAlert, ShieldCheck, Edit3, Save, Globe, Smartphone, Banknote, Bell, MoreVertical, LayoutDashboard, MessageSquare, Send, Mail, Phone, Headset, Database, Camera, ShoppingBag } from 'lucide-react';
+import { useToast } from '../context/ToastContext';
+import { useNavigate } from 'react-router-dom';
 
 const AdminDashboard: React.FC = () => {
+  const { showToast } = useToast();
+  const navigate = useNavigate();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [settings, setSettings] = useState<SystemSettings>({
@@ -14,14 +19,23 @@ const AdminDashboard: React.FC = () => {
     minWithdrawal: 200,
     minRecharge: 100,
     withdrawalFee: 5,
+    supportTelegram: '@GrowvixSupport',
+    supportWhatsApp: '+91 98765 43210',
+    supportEmail: 'support@growvix.com',
+    supportChannel: '@GrowvixOfficial',
+    customFirebase: JSON.parse(localStorage.getItem('GROWVIX_CUSTOM_FIREBASE') || 'null')
   });
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'requests' | 'users' | 'settings'>('requests');
+  const [activeTab, setActiveTab] = useState<'requests' | 'users' | 'settings' | 'overview' | 'database' | 'plans'>('overview');
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
+  const [editPlanData, setEditPlanData] = useState<Partial<Plan>>({});
   const [requestType, setRequestType] = useState<'recharge' | 'withdraw'>('recharge');
   const [processing, setProcessing] = useState<string | null>(null);
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
   const [editBalances, setEditBalances] = useState({ deposit: 0, withdrawable: 0, hasRecharged: false });
   const [searchQuery, setSearchQuery] = useState('');
+  const [showMenu, setShowMenu] = useState(false);
 
   useEffect(() => {
     // Listen to pending transactions
@@ -36,6 +50,12 @@ const AdminDashboard: React.FC = () => {
     const unsubscribeUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
       const usersData = snapshot.docs.map(doc => doc.data() as UserProfile);
       setUsers(usersData);
+    });
+
+    // Listen to plans real-time
+    const unsubscribePlans = onSnapshot(collection(db, 'plans'), (snapshot) => {
+      const plansData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Plan));
+      setPlans(plansData);
     });
 
     // Fetch settings
@@ -53,58 +73,92 @@ const AdminDashboard: React.FC = () => {
     return () => {
       unsubscribeTransactions();
       unsubscribeUsers();
+      unsubscribePlans();
     };
   }, []);
+
+  const sendNotification = async (userId: string, email: string, title: string, message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info') => {
+    try {
+      // 1. Create Firestore Notification
+      await addDoc(collection(db, 'notifications'), {
+        userId,
+        title,
+        message,
+        type,
+        read: false,
+        createdAt: serverTimestamp(),
+      });
+
+      // 2. Send Email via API
+      await fetch('/api/send-notification-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, subject: title, message }),
+      });
+    } catch (error) {
+      console.error("Failed to send notification:", error);
+    }
+  };
 
   const handleApprove = async (transaction: Transaction) => {
     setProcessing(transaction.id);
     try {
-      // 1. Update Transaction Status
-      await updateDoc(doc(db, 'transactions', transaction.id), {
-        status: TransactionStatus.APPROVED,
-        approvedAt: serverTimestamp(),
-      });
+      const amount = Number(transaction.amount);
+      if (isNaN(amount) || amount <= 0) {
+        throw new Error("Invalid transaction amount");
+      }
+
+      // 1. Get User Profile first to ensure it exists
+      const userRef = doc(db, 'users', transaction.userId);
+      const userSnap = await getDoc(userRef);
+      
+      if (!userSnap.exists()) {
+        throw new Error("User not found");
+      }
+      
+      const userData = userSnap.data() as UserProfile;
 
       // 2. If Recharge, add balance to user
       if (transaction.type === TransactionType.RECHARGE) {
-        await updateDoc(doc(db, 'users', transaction.userId), {
-          depositBalance: increment(transaction.amount),
-          balance: increment(transaction.amount),
+        await updateDoc(userRef, {
+          depositBalance: increment(amount),
+          balance: increment(amount),
           hasRecharged: true,
         });
 
         // 3. Referral Commission Logic (3 Levels)
-        const userDoc = await getDocs(query(collection(db, 'users'), where('uid', '==', transaction.userId)));
-        const userData = userDoc.docs[0].data() as UserProfile;
-
         const processCommission = async (referrerId: string, level: number) => {
           if (!referrerId || level > 3) return;
 
           const commissionRates = [0, 0.10, 0.05, 0.02]; // Rates for LV1, LV2, LV3
           const rate = commissionRates[level];
-          const commission = transaction.amount * rate;
+          const commission = amount * rate;
 
           if (commission > 0) {
-            await updateDoc(doc(db, 'users', referrerId), {
-              balance: increment(commission),
-              withdrawableBalance: increment(commission),
-              totalIncome: increment(commission),
-            });
-            await addDoc(collection(db, 'transactions'), {
-              userId: referrerId,
-              amount: commission,
-              type: TransactionType.REFERRAL,
-              status: TransactionStatus.COMPLETED,
-              createdAt: serverTimestamp(),
-              description: `LV${level} Referral commission from ${userData.phone}`,
-            });
+            const referrerRef = doc(db, 'users', referrerId);
+            const referrerSnap = await getDoc(referrerRef);
+            
+            if (referrerSnap.exists()) {
+              const referrerData = referrerSnap.data() as UserProfile;
+              
+              await updateDoc(referrerRef, {
+                balance: increment(commission),
+                withdrawableBalance: increment(commission),
+                totalIncome: increment(commission),
+              });
+              
+              await addDoc(collection(db, 'transactions'), {
+                userId: referrerId,
+                amount: commission,
+                type: TransactionType.REFERRAL,
+                status: TransactionStatus.COMPLETED,
+                createdAt: serverTimestamp(),
+                description: `LV${level} Referral commission from ${userData.phone}`,
+              });
 
-            // Find next level referrer
-            const refDoc = await getDocs(query(collection(db, 'users'), where('uid', '==', referrerId)));
-            if (!refDoc.empty) {
-              const refData = refDoc.docs[0].data() as UserProfile;
-              if (refData.referredBy) {
-                await processCommission(refData.referredBy, level + 1);
+              // Find next level referrer
+              if (referrerData.referredBy) {
+                await processCommission(referrerData.referredBy, level + 1);
               }
             }
           }
@@ -115,10 +169,21 @@ const AdminDashboard: React.FC = () => {
         }
       }
 
-      alert("Transaction approved!");
+      // 4. Update Transaction Status LAST
+      await updateDoc(doc(db, 'transactions', transaction.id), {
+        status: TransactionStatus.APPROVED,
+        approvedAt: serverTimestamp(),
+      });
+
+      // 5. Send Notification
+      const title = transaction.type === TransactionType.RECHARGE ? "Recharge Approved" : "Withdrawal Approved";
+      const message = `Your ${transaction.type} of ₹${amount} has been approved. ${transaction.type === TransactionType.RECHARGE ? 'Balance added to your wallet.' : 'Funds will reach your bank account soon.'}`;
+      await sendNotification(transaction.userId, userData.email, title, message, 'success');
+
+      showToast("Transaction approved successfully!", "success");
     } catch (error) {
       console.error("Approval error:", error);
-      alert("Failed to approve transaction.");
+      showToast("Failed to approve transaction: " + (error instanceof Error ? error.message : "Unknown error"), "error");
     } finally {
       setProcessing(null);
     }
@@ -127,6 +192,13 @@ const AdminDashboard: React.FC = () => {
   const handleReject = async (transaction: Transaction) => {
     setProcessing(transaction.id);
     try {
+      const amount = Number(transaction.amount);
+      
+      // Get User Profile for notification
+      const userRef = doc(db, 'users', transaction.userId);
+      const userSnap = await getDoc(userRef);
+      const userData = userSnap.data() as UserProfile;
+
       // 1. Update Transaction Status
       await updateDoc(doc(db, 'transactions', transaction.id), {
         status: TransactionStatus.REJECTED,
@@ -136,15 +208,22 @@ const AdminDashboard: React.FC = () => {
       // 2. If Withdrawal, refund balance to user
       if (transaction.type === TransactionType.WITHDRAW) {
         await updateDoc(doc(db, 'users', transaction.userId), {
-          balance: increment(transaction.amount),
-          withdrawableBalance: increment(transaction.amount),
+          balance: increment(amount),
+          withdrawableBalance: increment(amount),
         });
       }
 
-      alert("Transaction rejected!");
+      // 3. Send Notification
+      const title = transaction.type === TransactionType.RECHARGE ? "Recharge Rejected" : "Withdrawal Rejected";
+      const message = `Your ${transaction.type} of ₹${amount} has been rejected. ${transaction.type === TransactionType.WITHDRAW ? 'Amount has been refunded to your wallet.' : 'Please contact support for details.'}`;
+      if (userData) {
+        await sendNotification(transaction.userId, userData.email, title, message, 'error');
+      }
+
+      showToast("Transaction rejected and balance refunded (if applicable).", "info");
     } catch (error) {
       console.error("Rejection error:", error);
-      alert("Failed to reject transaction.");
+      showToast("Failed to reject transaction.", "error");
     } finally {
       setProcessing(null);
     }
@@ -156,9 +235,9 @@ const AdminDashboard: React.FC = () => {
         isBanned: !u.isBanned
       });
       setUsers(users.map(user => user.uid === u.uid ? { ...user, isBanned: !u.isBanned } : user));
-      alert(`User ${u.isBanned ? 'unbanned' : 'banned'} successfully!`);
+      showToast(`User ${u.isBanned ? 'unbanned' : 'banned'} successfully!`, "success");
     } catch (error) {
-      alert("Failed to update user status.");
+      showToast("Failed to update user status.", "error");
     }
   };
 
@@ -180,18 +259,144 @@ const AdminDashboard: React.FC = () => {
         hasRecharged: editBalances.hasRecharged
       } : user));
       setEditingUser(null);
-      alert("User profile updated successfully!");
+      showToast("User profile updated successfully!", "success");
     } catch (error) {
-      alert("Failed to update user profile.");
+      showToast("Failed to update user profile.", "error");
+    }
+  };
+
+  const handleResetData = async () => {
+    const confirmText = "CRITICAL WARNING: This will delete ALL users (except admins), ALL transactions, and ALL investments. This action CANNOT be undone. Type 'RESET' to confirm:";
+    const confirmation = window.prompt(confirmText);
+    
+    if (confirmation !== 'RESET') {
+      showToast("Reset cancelled.", "info");
+      return;
+    }
+
+    setProcessing('reset');
+    try {
+      // 1. Delete Transactions
+      const transSnap = await getDocs(collection(db, 'transactions'));
+      for (const d of transSnap.docs) {
+        await deleteDoc(doc(db, 'transactions', d.id));
+      }
+
+      // 2. Delete Investments
+      const investSnap = await getDocs(collection(db, 'investments'));
+      for (const d of investSnap.docs) {
+        await deleteDoc(doc(db, 'investments', d.id));
+      }
+
+      // 3. Delete Users (except admins)
+      const usersSnap = await getDocs(collection(db, 'users'));
+      for (const d of usersSnap.docs) {
+        const data = d.data() as UserProfile;
+        if (data.role === 'admin') continue;
+        
+        // We can't delete Auth users from here, but we can delete their Firestore profile
+        await deleteDoc(doc(db, 'users', d.id));
+      }
+
+      showToast("System data reset successfully! Note: User authentication accounts still exist in Firebase Auth and must be deleted manually if needed.", "success");
+    } catch (error) {
+      console.error("Reset error:", error);
+      showToast("Reset failed: " + (error instanceof Error ? error.message : "Unknown error"), "error");
+    } finally {
+      setProcessing(null);
     }
   };
 
   const handleSaveSettings = async () => {
     try {
-      await setDoc(doc(db, 'system', 'settings'), settings);
-      alert("Settings saved successfully!");
+      await setDoc(doc(db, 'system', 'settings'), {
+        adminUpi: settings.adminUpi,
+        websiteUrl: settings.websiteUrl,
+        minWithdrawal: settings.minWithdrawal,
+        minRecharge: settings.minRecharge,
+        withdrawalFee: settings.withdrawalFee,
+        supportTelegram: settings.supportTelegram,
+        supportWhatsApp: settings.supportWhatsApp,
+        supportEmail: settings.supportEmail,
+        supportChannel: settings.supportChannel,
+      });
+      showToast('Settings saved successfully!', 'success');
     } catch (error) {
-      alert("Failed to save settings.");
+      handleFirestoreError(error, OperationType.WRITE, 'system/settings');
+      showToast('Failed to save settings', 'error');
+    }
+  };
+
+  const handleSaveDatabase = () => {
+    if (settings.customFirebase && settings.customFirebase.apiKey && settings.customFirebase.projectId) {
+      localStorage.setItem('GROWVIX_CUSTOM_FIREBASE', JSON.stringify(settings.customFirebase));
+      showToast('Database configuration saved! Reloading...', 'success');
+      setTimeout(() => window.location.reload(), 2000);
+    } else {
+      showToast('Please fill in all required Firebase fields', 'error');
+    }
+  };
+
+  const handleResetFirebase = () => {
+    localStorage.removeItem('GROWVIX_CUSTOM_FIREBASE');
+    showToast('Firebase reset to default! Reloading...', 'success');
+    setTimeout(() => window.location.reload(), 1500);
+  };
+
+  const handleDeletePlan = async (planId: string) => {
+    if (!window.confirm("Are you sure you want to delete this plan?")) return;
+    try {
+      await deleteDoc(doc(db, 'plans', planId));
+      showToast("Plan deleted successfully!", "success");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `plans/${planId}`);
+      showToast("Failed to delete plan", "error");
+    }
+  };
+
+  const handleUpdatePlan = async () => {
+    if (!editingPlan) return;
+    try {
+      await updateDoc(doc(db, 'plans', editingPlan.id), {
+        name: editPlanData.name,
+        price: Number(editPlanData.price),
+        dailyIncome: Number(editPlanData.dailyIncome),
+        validityDays: Number(editPlanData.validityDays),
+        imageUrl: editPlanData.imageUrl
+      });
+      setEditingPlan(null);
+      showToast("Plan updated successfully!", "success");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `plans/${editingPlan.id}`);
+      showToast("Failed to update plan", "error");
+    }
+  };
+
+  const handleRestoreDefaultPlans = async () => {
+    const defaultPlans = [
+      { name: 'VIP 1', price: 500, dailyIncome: 50, validityDays: 30, imageUrl: 'https://picsum.photos/seed/vip1/400/300' },
+      { name: 'VIP 2', price: 1000, dailyIncome: 110, validityDays: 30, imageUrl: 'https://picsum.photos/seed/vip2/400/300' },
+      { name: 'VIP 3', price: 5000, dailyIncome: 600, validityDays: 30, imageUrl: 'https://picsum.photos/seed/vip3/400/300' },
+      { name: 'VIP 4', price: 10000, dailyIncome: 1300, validityDays: 30, imageUrl: 'https://picsum.photos/seed/vip4/400/300' },
+    ];
+
+    setProcessing('restore');
+    try {
+      for (const plan of defaultPlans) {
+        // Check if plan already exists by name
+        const exists = plans.some(p => p.name === plan.name);
+        if (!exists) {
+          await addDoc(collection(db, 'plans'), {
+            ...plan,
+            createdAt: serverTimestamp()
+          });
+        }
+      }
+      showToast("Default plans restored!", "success");
+    } catch (error) {
+      showToast("Failed to restore default plans", "error");
+    } finally {
+      setProcessing(null);
     }
   };
 
@@ -205,65 +410,156 @@ const AdminDashboard: React.FC = () => {
 
   return (
     <div className="p-4 space-y-6 max-w-4xl mx-auto pb-20">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between sticky top-0 bg-gray-50/80 backdrop-blur-md z-40 py-2">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-lg overflow-hidden border border-gray-100">
+          <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-lg overflow-hidden border border-gray-100">
             <img 
               src="https://i.ibb.co/CcxW3F4/file-0000000054487208abbf2cb1db170f4e.png" 
               alt="Growvix Logo" 
-              className="w-full h-full object-contain p-1"
+              className="w-full h-full object-cover"
               referrerPolicy="no-referrer"
             />
           </div>
           <div>
-            <h1 className="text-2xl font-black text-gray-800 tracking-tight">Admin Dashboard</h1>
-            <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Growvix Management</p>
+            <h1 className="text-xl font-black text-gray-800 tracking-tight">Admin</h1>
+            <p className="text-[8px] text-gray-400 font-bold uppercase tracking-widest">Growvix Management</p>
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={() => navigate('/notifications')}
+            className="p-2.5 bg-white rounded-xl text-gray-400 hover:text-[#ff0000] transition-colors shadow-sm border border-gray-50"
+          >
+            <Bell size={20} />
+          </button>
+          
+          <div className="relative">
+            <button 
+              onClick={() => setShowMenu(!showMenu)}
+              className={`p-2.5 bg-white rounded-xl transition-all shadow-sm border border-gray-50 ${showMenu ? 'text-[#ff0000] border-red-100' : 'text-gray-400'}`}
+            >
+              <MoreVertical size={20} />
+            </button>
+            
+            <AnimatePresence>
+              {showMenu && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)}></div>
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                    className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden"
+                  >
+                    <div className="p-2 space-y-1">
+                      {[
+                        { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+                        { id: 'requests', label: 'Requests', icon: Clock },
+                        { id: 'users', label: 'Users', icon: Users },
+                        { id: 'plans', label: 'Manage Plans', icon: ShoppingBag },
+                        { id: 'add-plan', label: 'Add Plan', icon: Camera, action: () => navigate('/admin/add-plan') },
+                        { id: 'settings', label: 'Settings', icon: Settings },
+                        { id: 'database', label: 'Database', icon: Database },
+                      ].map((item) => (
+                        <button
+                          key={item.id}
+                          onClick={() => {
+                            if (item.action) {
+                              item.action();
+                            } else {
+                              setActiveTab(item.id as any);
+                            }
+                            setShowMenu(false);
+                          }}
+                          className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-colors ${
+                            activeTab === item.id ? 'bg-red-50 text-[#ff0000]' : 'text-gray-500 hover:bg-gray-50'
+                          }`}
+                        >
+                          <item.icon size={16} />
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
           </div>
         </div>
       </div>
 
-      {/* Stats Overview */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-[25px] shadow-sm border border-gray-50 flex flex-col items-center gap-2">
-          <Users className="text-blue-500" size={24} />
-          <p className="text-lg font-black text-gray-800">{users.length}</p>
-          <p className="text-[10px] text-gray-400 font-bold uppercase">Total Users</p>
-        </div>
-        <div className="bg-white p-4 rounded-[25px] shadow-sm border border-gray-50 flex flex-col items-center gap-2 text-center">
-          <Clock className="text-orange-500" size={24} />
-          <p className="text-lg font-black text-gray-800">{transactions.length}</p>
-          <p className="text-[10px] text-gray-400 font-bold uppercase">Pending Requests</p>
-        </div>
-        <div className="bg-white p-4 rounded-[25px] shadow-sm border border-gray-50 flex flex-col items-center gap-2 text-center">
-          <ArrowUpCircle className="text-green-500" size={24} />
-          <p className="text-lg font-black text-gray-800">₹{users.reduce((acc, u) => acc + (u.depositBalance || 0), 0).toFixed(0)}</p>
-          <p className="text-[10px] text-gray-400 font-bold uppercase">Total Deposit</p>
-        </div>
-        <div className="bg-white p-4 rounded-[25px] shadow-sm border border-gray-50 flex flex-col items-center gap-2 text-center">
-          <ArrowDownCircle className="text-red-500" size={24} />
-          <p className="text-lg font-black text-gray-800">₹{users.reduce((acc, u) => acc + (u.withdrawableBalance || 0), 0).toFixed(0)}</p>
-          <p className="text-[10px] text-gray-400 font-bold uppercase">Total Withdrawable</p>
-        </div>
-      </div>
+      {activeTab === 'overview' && (
+        <div className="space-y-6">
+          {/* Stats Overview */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-white p-4 rounded-[25px] shadow-sm border border-gray-50 flex flex-col items-center gap-2">
+              <Users className="text-blue-500" size={24} />
+              <p className="text-lg font-black text-gray-800">{users.length}</p>
+              <p className="text-[10px] text-gray-400 font-bold uppercase">Total Users</p>
+            </div>
+            <div className="bg-white p-4 rounded-[25px] shadow-sm border border-gray-50 flex flex-col items-center gap-2 text-center">
+              <Clock className="text-orange-500" size={24} />
+              <p className="text-lg font-black text-gray-800">{transactions.length}</p>
+              <p className="text-[10px] text-gray-400 font-bold uppercase">Pending Requests</p>
+            </div>
+            <div className="bg-white p-4 rounded-[25px] shadow-sm border border-gray-50 flex flex-col items-center gap-2 text-center">
+              <ArrowUpCircle className="text-green-500" size={24} />
+              <p className="text-lg font-black text-gray-800">₹{users.reduce((acc, u) => acc + (u.depositBalance || 0), 0).toFixed(0)}</p>
+              <p className="text-[10px] text-gray-400 font-bold uppercase">Total Deposit</p>
+            </div>
+            <div className="bg-white p-4 rounded-[25px] shadow-sm border border-gray-50 flex flex-col items-center gap-2 text-center">
+              <ArrowDownCircle className="text-red-500" size={24} />
+              <p className="text-lg font-black text-gray-800">₹{users.reduce((acc, u) => acc + (u.withdrawableBalance || 0), 0).toFixed(0)}</p>
+              <p className="text-[10px] text-gray-400 font-bold uppercase">Total Withdrawable</p>
+            </div>
+          </div>
 
-      {/* Tabs */}
+          <div className="bg-white p-6 rounded-[30px] shadow-sm border border-gray-50 space-y-4">
+            <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest">Quick Actions</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <button 
+                onClick={() => { setActiveTab('requests'); setRequestType('recharge'); }}
+                className="p-4 bg-green-50 text-green-600 rounded-2xl border border-green-100 flex flex-col items-center gap-2 active:scale-95 transition-transform"
+              >
+                <ArrowUpCircle size={24} />
+                <span className="text-[10px] font-black uppercase">Recharges</span>
+              </button>
+              <button 
+                onClick={() => { setActiveTab('requests'); setRequestType('withdraw'); }}
+                className="p-4 bg-red-50 text-red-600 rounded-2xl border border-red-100 flex flex-col items-center gap-2 active:scale-95 transition-transform"
+              >
+                <ArrowDownCircle size={24} />
+                <span className="text-[10px] font-black uppercase">Withdrawals</span>
+              </button>
+              <button 
+                onClick={() => navigate('/admin/add-plan')}
+                className="p-4 bg-purple-50 text-purple-600 rounded-2xl border border-purple-100 flex flex-col items-center gap-2 active:scale-95 transition-transform"
+              >
+                <Camera size={24} />
+                <span className="text-[10px] font-black uppercase">Add New Plan</span>
+              </button>
+              <button 
+                onClick={() => setActiveTab('plans')}
+                className="p-4 bg-orange-50 text-orange-600 rounded-2xl border border-orange-100 flex flex-col items-center gap-2 active:scale-95 transition-transform"
+              >
+                <ShoppingBag size={24} />
+                <span className="text-[10px] font-black uppercase">Manage Plans</span>
+              </button>
+              <button 
+                onClick={() => setActiveTab('settings')}
+                className="p-4 bg-gray-50 text-gray-600 rounded-2xl border border-gray-100 flex flex-col items-center gap-2 active:scale-95 transition-transform"
+              >
+                <Settings size={24} />
+                <span className="text-[10px] font-black uppercase">Settings</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main Content Area */}
       <div className="bg-white rounded-[30px] shadow-xl border border-gray-100 overflow-hidden">
-        <div className="flex border-b border-gray-100 bg-gray-50/30 p-2 gap-2">
-          {(['requests', 'users', 'settings'] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`flex-1 py-3 text-[11px] font-black transition-all uppercase tracking-widest rounded-2xl ${
-                activeTab === tab 
-                  ? 'text-white bg-[#ff0000] shadow-lg shadow-red-100' 
-                  : 'text-gray-400 hover:bg-gray-100'
-              }`}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
-
         <div className="p-4 space-y-4 min-h-[500px]">
           {activeTab === 'requests' && (
             <div className="space-y-6">
@@ -480,12 +776,260 @@ const AdminDashboard: React.FC = () => {
                   />
                 </div>
               </div>
+
+              <div className="pt-6 border-t border-gray-100 space-y-4">
+                <h3 className="text-xs font-black text-gray-800 uppercase tracking-widest flex items-center gap-2">
+                  <Headset size={14} className="text-[#ff0000]" /> Support Settings
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase flex items-center gap-2">
+                      <MessageSquare size={12} className="text-blue-500" /> Telegram ID
+                    </label>
+                    <input 
+                      type="text" 
+                      value={settings.supportTelegram}
+                      onChange={(e) => setSettings({ ...settings, supportTelegram: e.target.value })}
+                      placeholder="@GrowvixSupport"
+                      className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase flex items-center gap-2">
+                      <Phone size={12} className="text-green-500" /> WhatsApp Number
+                    </label>
+                    <input 
+                      type="text" 
+                      value={settings.supportWhatsApp}
+                      onChange={(e) => setSettings({ ...settings, supportWhatsApp: e.target.value })}
+                      placeholder="+91 98765 43210"
+                      className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase flex items-center gap-2">
+                      <Mail size={12} className="text-[#ff0000]" /> Support Email
+                    </label>
+                    <input 
+                      type="text" 
+                      value={settings.supportEmail}
+                      onChange={(e) => setSettings({ ...settings, supportEmail: e.target.value })}
+                      placeholder="support@growvix.com"
+                      className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase flex items-center gap-2">
+                      <Send size={12} className="text-sky-500" /> Official Channel
+                    </label>
+                    <input 
+                      type="text" 
+                      value={settings.supportChannel}
+                      onChange={(e) => setSettings({ ...settings, supportChannel: e.target.value })}
+                      placeholder="@GrowvixOfficial"
+                      className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
+                    />
+                  </div>
+                </div>
+              </div>
+
               <button 
                 onClick={handleSaveSettings}
                 className="w-full bg-[#ff0000] text-white py-4 rounded-2xl font-black shadow-xl shadow-red-100 active:scale-95 transition-transform flex items-center justify-center gap-2"
               >
                 <Save size={20} /> Save System Settings
               </button>
+
+              <div className="pt-10 border-t border-red-100">
+                <div className="bg-red-50 p-6 rounded-[30px] border border-red-100 space-y-4">
+                  <div className="flex items-center gap-3 text-red-600">
+                    <ShieldAlert size={24} />
+                    <h3 className="font-black uppercase tracking-wider text-sm">Danger Zone</h3>
+                  </div>
+                  <p className="text-xs text-red-400 font-medium">
+                    Resetting system data will permanently delete all user profiles (except admins), transactions, and investments. Use this only when you want to start fresh.
+                  </p>
+                  <button 
+                    onClick={handleResetData}
+                    disabled={processing === 'reset'}
+                    className="w-full bg-white text-red-600 border-2 border-red-100 py-4 rounded-2xl font-black text-sm active:bg-red-600 active:text-white transition-all disabled:opacity-50"
+                  >
+                    {processing === 'reset' ? 'Resetting Data...' : 'Reset System Data'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'database' && (
+            <div className="space-y-6 p-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-black text-gray-800 tracking-tight">Database Configuration</h2>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Firebase Connection Settings</p>
+                </div>
+                <button 
+                  onClick={handleResetFirebase}
+                  className="px-4 py-2 bg-red-50 text-red-600 rounded-xl text-[10px] font-black uppercase border border-red-100 hover:bg-red-600 hover:text-white transition-all"
+                >
+                  Reset to Default
+                </button>
+              </div>
+
+              <div className="bg-orange-50 p-6 rounded-[30px] border border-orange-100 space-y-3">
+                <div className="flex items-center gap-3 text-orange-600">
+                  <ShieldAlert size={20} />
+                  <h3 className="font-black uppercase tracking-wider text-xs">Important Instructions</h3>
+                </div>
+                <p className="text-[11px] text-orange-700 font-medium leading-relaxed">
+                  To use your own database, follow these steps:
+                  <br />1. Create a project on <a href="https://console.firebase.google.com" target="_blank" rel="noreferrer" className="underline font-bold">Firebase Console</a>.
+                  <br />2. Enable <span className="font-bold">Authentication</span> (Google Login) and <span className="font-bold">Firestore Database</span>.
+                  <br />3. Create a Web App and copy the configuration details below.
+                  <br />4. After saving, the app will reload and connect to your new database.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-gray-400 uppercase">API Key</label>
+                  <input 
+                    type="text" 
+                    value={settings.customFirebase?.apiKey || ''}
+                    onChange={(e) => setSettings({ 
+                      ...settings, 
+                      customFirebase: { ...(settings.customFirebase || { authDomain: '', projectId: '', appId: '', apiKey: '' }), apiKey: e.target.value } 
+                    })}
+                    placeholder="AIzaSy..."
+                    className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-gray-400 uppercase">Project ID</label>
+                  <input 
+                    type="text" 
+                    value={settings.customFirebase?.projectId || ''}
+                    onChange={(e) => setSettings({ 
+                      ...settings, 
+                      customFirebase: { ...(settings.customFirebase || { authDomain: '', projectId: '', appId: '', apiKey: '' }), projectId: e.target.value } 
+                    })}
+                    placeholder="my-project-id"
+                    className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-gray-400 uppercase">Auth Domain</label>
+                  <input 
+                    type="text" 
+                    value={settings.customFirebase?.authDomain || ''}
+                    onChange={(e) => setSettings({ 
+                      ...settings, 
+                      customFirebase: { ...(settings.customFirebase || { authDomain: '', projectId: '', appId: '', apiKey: '' }), authDomain: e.target.value } 
+                    })}
+                    placeholder="my-project.firebaseapp.com"
+                    className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-gray-400 uppercase">App ID</label>
+                  <input 
+                    type="text" 
+                    value={settings.customFirebase?.appId || ''}
+                    onChange={(e) => setSettings({ 
+                      ...settings, 
+                      customFirebase: { ...(settings.customFirebase || { authDomain: '', projectId: '', appId: '', apiKey: '' }), appId: e.target.value } 
+                    })}
+                    placeholder="1:123456789:web:abc123"
+                    className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-gray-400 uppercase">Database ID (Optional)</label>
+                  <input 
+                    type="text" 
+                    value={settings.customFirebase?.firestoreDatabaseId || ''}
+                    onChange={(e) => setSettings({ 
+                      ...settings, 
+                      customFirebase: { ...(settings.customFirebase || { authDomain: '', projectId: '', appId: '', apiKey: '' }), firestoreDatabaseId: e.target.value } 
+                    })}
+                    placeholder="(default)"
+                    className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
+                  />
+                </div>
+              </div>
+
+              <button 
+                onClick={handleSaveDatabase}
+                className="w-full bg-[#ff0000] text-white py-4 rounded-2xl font-black shadow-xl shadow-red-100 active:scale-95 transition-transform flex items-center justify-center gap-2"
+              >
+                <Save size={20} /> Update Database Configuration
+              </button>
+            </div>
+          )}
+
+          {activeTab === 'plans' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-black text-gray-800 tracking-tight">Manage Plans</h2>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Edit or Delete Investment Plans</p>
+                </div>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={handleRestoreDefaultPlans}
+                    disabled={processing === 'restore'}
+                    className="px-4 py-2 bg-orange-50 text-orange-600 rounded-xl text-[10px] font-black uppercase border border-orange-100 hover:bg-orange-600 hover:text-white transition-all disabled:opacity-50"
+                  >
+                    {processing === 'restore' ? 'Restoring...' : 'Restore Defaults'}
+                  </button>
+                  <button 
+                    onClick={() => navigate('/admin/add-plan')}
+                    className="px-4 py-2 bg-[#ff0000] text-white rounded-xl text-[10px] font-black uppercase shadow-md active:scale-95 transition-transform"
+                  >
+                    Add New
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {plans.length > 0 ? (
+                  plans.map((plan) => (
+                    <div key={plan.id} className="bg-gray-50 p-4 rounded-2xl border border-gray-100 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-xl overflow-hidden border border-gray-200">
+                          <img src={plan.imageUrl} alt={plan.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-black text-gray-800">{plan.name}</p>
+                          <p className="text-[10px] text-gray-400 font-bold">₹{plan.price} • ₹{plan.dailyIncome}/day</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => {
+                            setEditingPlan(plan);
+                            setEditPlanData(plan);
+                          }}
+                          className="p-2 bg-white text-blue-500 rounded-xl shadow-sm border border-gray-100 active:scale-90 transition-transform"
+                        >
+                          <Edit3 size={16} />
+                        </button>
+                        <button 
+                          onClick={() => handleDeletePlan(plan.id)}
+                          className="p-2 bg-white text-red-500 rounded-xl shadow-sm border border-gray-100 active:scale-90 transition-transform"
+                        >
+                          <XCircle size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="col-span-full py-20 text-center text-gray-400">
+                    <ShoppingBag size={40} className="mx-auto mb-2 opacity-20" />
+                    <p className="text-sm font-medium">No plans found. Click Restore Defaults to get started.</p>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -546,6 +1090,84 @@ const AdminDashboard: React.FC = () => {
                 className="w-full bg-[#ff0000] text-white py-4 rounded-2xl font-black shadow-xl shadow-red-100 active:scale-95 transition-transform flex items-center justify-center gap-2"
               >
                 <Save size={20} /> Update User Profile
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Edit Plan Modal */}
+      <AnimatePresence>
+        {editingPlan && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-[30px] p-6 w-full max-w-sm space-y-6 shadow-2xl overflow-y-auto max-h-[90vh]"
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-black text-gray-800">Edit Plan</h3>
+                <button onClick={() => setEditingPlan(null)} className="text-gray-400 hover:text-gray-600">
+                  <XCircle size={24} />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-gray-400 uppercase">Plan Name</label>
+                  <input 
+                    type="text" 
+                    value={editPlanData.name || ''}
+                    onChange={(e) => setEditPlanData({ ...editPlanData, name: e.target.value })}
+                    className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase">Price (₹)</label>
+                    <input 
+                      type="number" 
+                      value={editPlanData.price || ''}
+                      onChange={(e) => setEditPlanData({ ...editPlanData, price: parseFloat(e.target.value) })}
+                      className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase">Daily Income (₹)</label>
+                    <input 
+                      type="number" 
+                      value={editPlanData.dailyIncome || ''}
+                      onChange={(e) => setEditPlanData({ ...editPlanData, dailyIncome: parseFloat(e.target.value) })}
+                      className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-gray-400 uppercase">Validity (Days)</label>
+                  <input 
+                    type="number" 
+                    value={editPlanData.validityDays || ''}
+                    onChange={(e) => setEditPlanData({ ...editPlanData, validityDays: parseInt(e.target.value) })}
+                    className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-gray-400 uppercase">Image URL</label>
+                  <input 
+                    type="text" 
+                    value={editPlanData.imageUrl || ''}
+                    onChange={(e) => setEditPlanData({ ...editPlanData, imageUrl: e.target.value })}
+                    className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
+                  />
+                </div>
+              </div>
+
+              <button 
+                onClick={handleUpdatePlan}
+                className="w-full bg-[#ff0000] text-white py-4 rounded-2xl font-black shadow-xl shadow-red-100 active:scale-95 transition-transform flex items-center justify-center gap-2"
+              >
+                <Save size={20} /> Update Plan
               </button>
             </motion.div>
           </div>

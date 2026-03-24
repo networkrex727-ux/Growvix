@@ -1,15 +1,30 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { getDoc, doc } from 'firebase/firestore';
+import { db } from '../firebase';
+import { SystemSettings } from '../types';
 import { motion } from 'motion/react';
-import { ArrowLeft, Headset, MessageSquare, Phone, Mail, Clock, ShieldCheck, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Headset, MessageSquare, Phone, Mail, Clock, ShieldCheck, ExternalLink, Send } from 'lucide-react';
 
 const Support: React.FC = () => {
   const navigate = useNavigate();
+  const [settings, setSettings] = useState<SystemSettings | null>(null);
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      const settingsDoc = await getDoc(doc(db, 'system', 'settings'));
+      if (settingsDoc.exists()) {
+        setSettings(settingsDoc.data() as SystemSettings);
+      }
+    };
+    fetchSettings();
+  }, []);
 
   const supportChannels = [
-    { label: 'Telegram Support', icon: MessageSquare, value: '@GrowvixSupport', color: 'text-blue-500', bg: 'bg-blue-50' },
-    { label: 'WhatsApp Support', icon: Phone, value: '+91 98765 43210', color: 'text-green-500', bg: 'bg-green-50' },
-    { label: 'Email Support', icon: Mail, value: 'support@growvix.com', color: 'text-[#ff0000]', bg: 'bg-red-50' },
+    { label: 'Telegram Support', icon: MessageSquare, value: settings?.supportTelegram || '@GrowvixSupport', color: 'text-blue-500', bg: 'bg-blue-50', link: `https://t.me/${(settings?.supportTelegram || '@GrowvixSupport').replace('@', '')}` },
+    { label: 'WhatsApp Support', icon: Phone, value: settings?.supportWhatsApp || '+91 98765 43210', color: 'text-green-500', bg: 'bg-green-50', link: `https://wa.me/${(settings?.supportWhatsApp || '919876543210').replace(/\D/g, '')}` },
+    { label: 'Email Support', icon: Mail, value: settings?.supportEmail || 'support@growvix.com', color: 'text-[#ff0000]', bg: 'bg-red-50', link: `mailto:${settings?.supportEmail || 'support@growvix.com'}` },
+    { label: 'Official Channel', icon: Send, value: settings?.supportChannel || 'Growvix Official', color: 'text-sky-500', bg: 'bg-sky-50', link: settings?.supportChannel?.startsWith('http') ? settings.supportChannel : `https://t.me/${(settings?.supportChannel || 'GrowvixOfficial').replace('@', '')}` },
   ];
 
   return (
@@ -39,13 +54,13 @@ const Support: React.FC = () => {
         <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-white/10 rounded-full blur-3xl"></div>
       </motion.div>
 
-      {/* Support Channels */}
       <div className="space-y-4">
         {supportChannels.map((channel) => (
           <motion.div
             key={channel.label}
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
+            onClick={() => window.open(channel.link, '_blank')}
             className="bg-white p-5 rounded-[25px] shadow-sm border border-gray-50 flex items-center justify-between group cursor-pointer"
           >
             <div className="flex items-center gap-4">

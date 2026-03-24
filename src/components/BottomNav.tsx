@@ -24,8 +24,11 @@ const BottomNav: React.FC = () => {
   };
 
   return (
-    <nav className="fixed bottom-8 left-0 right-0 z-50 pointer-events-none px-8">
-      <div className="flex justify-between items-center w-full max-w-md mx-auto">
+    <nav className="fixed bottom-6 left-0 right-0 z-50 pointer-events-none px-6">
+      <div className="relative w-full max-w-md mx-auto h-20 flex items-center justify-around bg-white/80 backdrop-blur-xl rounded-[30px] shadow-[0_20px_50px_rgba(0,0,0,0.1)] border border-white/50 pointer-events-auto px-2 overflow-hidden">
+        {/* Dynamic Background Glow */}
+        <div className="absolute inset-0 bg-gradient-to-tr from-[#ff0000]/5 to-transparent pointer-events-none" />
+        
         {navItems.map((item) => (
           <NavLink
             key={item.to}
@@ -33,9 +36,9 @@ const BottomNav: React.FC = () => {
             onClick={handleVibrate}
             className={({ isActive }) =>
               cn(
-                "pointer-events-auto flex flex-col items-center gap-1 transition-all duration-500 flex-1 relative py-2",
+                "flex flex-col items-center gap-1 transition-all duration-500 flex-1 relative py-2 z-10",
                 isActive 
-                  ? "text-[#ff0000] scale-125 -translate-y-4" 
+                  ? "text-[#ff0000]" 
                   : "text-gray-400 hover:text-gray-600"
               )
             }
@@ -44,20 +47,26 @@ const BottomNav: React.FC = () => {
               <>
                 <motion.div
                   whileTap={{ scale: 0.9 }}
+                  animate={isActive ? { y: -4 } : { y: 0 }}
                   className="flex flex-col items-center gap-1"
                 >
-                  <item.icon size={26} strokeWidth={isActive ? 2.5 : 1.5} />
+                  <div className={cn(
+                    "p-2 rounded-2xl transition-all duration-500",
+                    isActive ? "bg-red-50 shadow-inner" : "bg-transparent"
+                  )}>
+                    <item.icon size={24} strokeWidth={isActive ? 2.5 : 1.5} />
+                  </div>
                   <span className={cn(
-                    "text-[8px] font-black uppercase tracking-[0.2em] transition-all duration-300",
-                    isActive ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"
+                    "text-[9px] font-black uppercase tracking-[0.1em] transition-all duration-300",
+                    isActive ? "opacity-100 scale-100" : "opacity-0 scale-75"
                   )}>
                     {item.label}
                   </span>
                 </motion.div>
                 {isActive && (
                   <motion.div 
-                    layoutId="active-dot"
-                    className="absolute -bottom-2 w-1.5 h-1.5 bg-[#ff0000] rounded-full"
+                    layoutId="active-pill"
+                    className="absolute -bottom-1 w-8 h-1 bg-[#ff0000] rounded-full shadow-[0_0_10px_rgba(255,0,0,0.5)]"
                   />
                 )}
               </>

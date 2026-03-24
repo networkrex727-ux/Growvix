@@ -2,10 +2,12 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebase';
+import { useToast } from '../context/ToastContext';
 import { motion } from 'motion/react';
 import { Phone, Lock, Eye, EyeOff, ArrowRight, Mail } from 'lucide-react';
 
 const Login: React.FC = () => {
+  const { showToast } = useToast();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -17,10 +19,11 @@ const Login: React.FC = () => {
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email.toLowerCase().trim(), password);
+      showToast("Login successful!", "success");
       navigate('/');
     } catch (error: any) {
       console.error("Login error:", error);
-      alert(error.message || "Invalid email or password");
+      showToast(error.message || "Invalid email or password", "error");
     } finally {
       setLoading(false);
     }
@@ -46,7 +49,7 @@ const Login: React.FC = () => {
             animate={{ scale: 1, opacity: 1 }}
             src="https://i.ibb.co/CcxW3F4/file-0000000054487208abbf2cb1db170f4e.png"
             alt="Growvix Logo"
-            className="w-32 h-32 object-contain"
+            className="w-32 h-32 object-cover rounded-full border-4 border-red-50 shadow-xl"
             referrerPolicy="no-referrer"
           />
           <div className="text-center">

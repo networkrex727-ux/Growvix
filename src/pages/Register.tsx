@@ -3,11 +3,13 @@ import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp, query, collection, where, getDocs } from 'firebase/firestore';
 import { auth, db } from '../firebase';
+import { useToast } from '../context/ToastContext';
 import { UserRole } from '../types';
 import { motion } from 'motion/react';
 import { Phone, Lock, Eye, EyeOff, ArrowLeft, UserPlus, ShieldCheck, Mail } from 'lucide-react';
 
 const Register: React.FC = () => {
+  const { showToast } = useToast();
   const [searchParams] = useSearchParams();
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
@@ -25,7 +27,7 @@ const Register: React.FC = () => {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password !== confirmPassword) {
-      alert("Passwords do not match");
+      showToast("Passwords do not match", "warning");
       return;
     }
 
@@ -65,6 +67,7 @@ const Register: React.FC = () => {
         };
 
         await setDoc(doc(db, 'users', user.uid), userProfile);
+        showToast("Registration successful!", "success");
         navigate('/');
       } catch (firestoreError: any) {
         console.error("Firestore setup error, rolling back auth:", firestoreError);
@@ -74,7 +77,7 @@ const Register: React.FC = () => {
       }
     } catch (error: any) {
       console.error("Registration error:", error);
-      alert(error.message || "Registration failed");
+      showToast(error.message || "Registration failed", "error");
     } finally {
       setLoading(false);
     }
@@ -106,7 +109,7 @@ const Register: React.FC = () => {
             animate={{ scale: 1, opacity: 1 }}
             src="https://i.ibb.co/CcxW3F4/file-0000000054487208abbf2cb1db170f4e.png"
             alt="Growvix Logo"
-            className="w-24 h-24 object-contain"
+            className="w-24 h-24 object-cover rounded-full border-4 border-red-50 shadow-lg"
             referrerPolicy="no-referrer"
           />
         </div>
