@@ -24,6 +24,7 @@ import Rules from './pages/Rules';
 import MyInvestments from './pages/MyInvestments';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminAddPlan from './pages/AdminAddPlan';
+import Checkout from './pages/Checkout';
 import ForgotPassword from './pages/ForgotPassword';
 import Notifications from './pages/Notifications';
 import NotFound from './pages/NotFound';
@@ -89,7 +90,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; adminOnly?: boolean 
 const AppLayout: React.FC = () => {
   const { user, loading } = useAuth();
   const location = useLocation();
-  const showNav = user && !['/login', '/register', '/admin'].some(path => location.pathname.startsWith(path));
+  const showNav = user && !['/login', '/register', '/admin', '/checkout'].some(path => location.pathname.startsWith(path));
 
   // Redirect logged-in users away from auth pages
   if (!loading && user && ['/login', '/register', '/forgot-password'].includes(location.pathname)) {
@@ -121,6 +122,7 @@ const AppLayout: React.FC = () => {
             <Route path="/rules" element={<ProtectedRoute><Rules /></ProtectedRoute>} />
             <Route path="/my-investments" element={<ProtectedRoute><MyInvestments /></ProtectedRoute>} />
             <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
+            <Route path="/checkout" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />
             <Route path="/admin" element={<ProtectedRoute adminOnly><AdminDashboard /></ProtectedRoute>} />
             <Route path="/admin/add-plan" element={<ProtectedRoute adminOnly><AdminAddPlan /></ProtectedRoute>} />
             <Route path="/login" element={<Login />} />

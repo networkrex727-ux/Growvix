@@ -31,7 +31,7 @@ const Team: React.FC = () => {
     fetchSettings();
   }, []);
 
-  const websiteUrl = settings?.websiteUrl || window.location.origin;
+  const websiteUrl = window.location.origin;
 
   useEffect(() => {
     if (!user) return;

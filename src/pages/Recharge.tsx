@@ -32,38 +32,13 @@ const Recharge: React.FC = () => {
   const minRecharge = settings?.minRecharge || 100;
   const presets = [500, 1000, 2000, 5000, 10000, 20000];
 
-  const handleRecharge = async (e: React.FormEvent) => {
+  const handleRechargeNow = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !amount || parseFloat(amount) < minRecharge) {
+    if (!amount || parseFloat(amount) < minRecharge) {
       showToast(`Minimum recharge amount is ₹${minRecharge}`, "warning");
       return;
     }
-
-    if (!utr || utr.length < 12) {
-      showToast("Please enter a valid 12-digit UTR (Transaction ID)", "warning");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      await addDoc(collection(db, 'transactions'), {
-        userId: user.uid,
-        amount: parseFloat(amount),
-        type: TransactionType.RECHARGE,
-        status: TransactionStatus.PENDING,
-        paymentMethod,
-        utr: utr.trim(),
-        createdAt: serverTimestamp(),
-      });
-
-      showToast("Recharge request submitted! Please wait for admin approval.", "success");
-      navigate('/');
-    } catch (error) {
-      console.error("Recharge error:", error);
-      showToast("Failed to submit request. Please try again.", "error");
-    } finally {
-      setLoading(false);
-    }
+    navigate(`/checkout?amount=${amount}`);
   };
 
   return (
@@ -90,7 +65,7 @@ const Recharge: React.FC = () => {
       </div>
 
       {/* Recharge Form */}
-      <form onSubmit={handleRecharge} className="space-y-6">
+      <form onSubmit={handleRechargeNow} className="space-y-6">
         <div className="bg-white rounded-[25px] p-6 shadow-sm border border-gray-50 space-y-6">
           <div className="space-y-4">
             <p className="text-sm font-bold text-gray-700">Select Amount</p>
@@ -126,64 +101,6 @@ const Recharge: React.FC = () => {
             </div>
             <p className="text-[10px] text-gray-400 font-medium">Min: ₹100 | Max: ₹50,000</p>
           </div>
-
-          <div className="space-y-4">
-            <p className="text-sm font-bold text-gray-700">Payment Method</p>
-            <div className="space-y-3">
-              {['UPI'].map((method) => (
-                <button
-                  key={method}
-                  type="button"
-                  onClick={() => setPaymentMethod(method)}
-                  className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition-all ${
-                    paymentMethod === method 
-                      ? 'bg-red-50 border-[#ff0000]' 
-                      : 'bg-gray-50 border-transparent'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <Smartphone className="text-[#ff0000]" size={20} />
-                    <span className={`text-sm font-bold ${paymentMethod === method ? 'text-[#ff0000]' : 'text-gray-600'}`}>{method}</span>
-                  </div>
-                  {paymentMethod === method && <CheckCircle2 className="text-[#ff0000]" size={20} />}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {paymentMethod === 'UPI' && (
-            <div className="space-y-4 bg-red-50/50 p-4 rounded-2xl border border-red-100">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-[10px] text-gray-400 font-bold uppercase">Admin UPI ID</p>
-                  <p className="text-sm font-black text-gray-800">{adminUpi}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    navigator.clipboard.writeText(adminUpi);
-                    showToast("UPI ID Copied!", "success");
-                  }}
-                  className="bg-white text-[#ff0000] px-4 py-2 rounded-xl text-xs font-bold shadow-sm border border-red-100 active:scale-95 transition-transform"
-                >
-                  Copy
-                </button>
-              </div>
-              <div className="space-y-2">
-                <p className="text-xs font-bold text-gray-700">Transaction ID (UTR)</p>
-                <input
-                  type="text"
-                  placeholder="Enter 12-digit UTR number"
-                  value={utr}
-                  onChange={(e) => setUtr(e.target.value)}
-                  className="w-full bg-white border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none transition-all font-bold text-gray-700 text-sm"
-                />
-                <p className="text-[10px] text-gray-400 font-medium italic">
-                  * Mandatory for verification
-                </p>
-              </div>
-            </div>
-          )}
         </div>
 
         <div className="bg-orange-50 p-4 rounded-2xl flex gap-3 border border-orange-100">
@@ -195,10 +112,9 @@ const Recharge: React.FC = () => {
 
         <button
           type="submit"
-          disabled={loading}
-          className="w-full bg-gradient-to-r from-[#ff0000] to-[#cc0000] text-white py-4 rounded-[20px] font-black text-lg shadow-xl shadow-red-200 active:scale-95 transition-transform disabled:opacity-50"
+          className="w-full bg-gradient-to-r from-[#ff0000] to-[#cc0000] text-white py-4 rounded-[20px] font-black text-lg shadow-xl shadow-red-200 active:scale-95 transition-transform"
         >
-          {loading ? 'Processing...' : 'Submit Recharge'}
+          Recharge Now
         </button>
       </form>
     </div>

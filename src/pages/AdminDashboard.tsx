@@ -62,7 +62,16 @@ const AdminDashboard: React.FC = () => {
     const fetchSettings = async () => {
       const settingsDoc = await getDoc(doc(db, 'system', 'settings'));
       if (settingsDoc.exists()) {
-        setSettings(settingsDoc.data() as SystemSettings);
+        const data = settingsDoc.data() as SystemSettings;
+        setSettings(data);
+        
+        // Automatically update domain if it's different from current origin
+        if (data.websiteUrl !== window.location.origin) {
+          await updateDoc(doc(db, 'system', 'settings'), {
+            websiteUrl: window.location.origin
+          });
+          setSettings(prev => ({ ...prev, websiteUrl: window.location.origin }));
+        }
       } else {
         // Initialize settings if they don't exist
         await setDoc(doc(db, 'system', 'settings'), settings);
