@@ -63,7 +63,7 @@ const AdminDashboard: React.FC = () => {
       const settingsDoc = await getDoc(doc(db, 'system', 'settings'));
       if (settingsDoc.exists()) {
         const data = settingsDoc.data() as SystemSettings;
-        setSettings(data);
+        setSettings(prev => ({ ...prev, ...data }));
         
         // Automatically update domain if it's different from current origin
         if (data.websiteUrl !== window.location.origin) {
@@ -74,7 +74,18 @@ const AdminDashboard: React.FC = () => {
         }
       } else {
         // Initialize settings if they don't exist
-        await setDoc(doc(db, 'system', 'settings'), settings);
+        const initialSettings = {
+          adminUpi: settings.adminUpi || 'growvix@upi',
+          websiteUrl: settings.websiteUrl || window.location.origin,
+          minWithdrawal: settings.minWithdrawal || 200,
+          minRecharge: settings.minRecharge || 100,
+          withdrawalFee: settings.withdrawalFee || 5,
+          supportTelegram: settings.supportTelegram || '@GrowvixSupport',
+          supportWhatsApp: settings.supportWhatsApp || '+91 98765 43210',
+          supportEmail: settings.supportEmail || 'support@growvix.com',
+          supportChannel: settings.supportChannel || '@GrowvixOfficial',
+        };
+        await setDoc(doc(db, 'system', 'settings'), initialSettings);
       }
     };
     fetchSettings();
@@ -162,7 +173,7 @@ const AdminDashboard: React.FC = () => {
                 type: TransactionType.REFERRAL,
                 status: TransactionStatus.COMPLETED,
                 createdAt: serverTimestamp(),
-                description: `LV${level} Referral commission from ${userData.phone}`,
+                description: `LV${level} Referral commission from ${userData.phone || 'User'}`,
               });
 
               // Find next level referrer
@@ -318,17 +329,19 @@ const AdminDashboard: React.FC = () => {
 
   const handleSaveSettings = async () => {
     try {
-      await setDoc(doc(db, 'system', 'settings'), {
-        adminUpi: settings.adminUpi,
-        websiteUrl: settings.websiteUrl,
-        minWithdrawal: settings.minWithdrawal,
-        minRecharge: settings.minRecharge,
-        withdrawalFee: settings.withdrawalFee,
-        supportTelegram: settings.supportTelegram,
-        supportWhatsApp: settings.supportWhatsApp,
-        supportEmail: settings.supportEmail,
-        supportChannel: settings.supportChannel,
-      });
+      const settingsToSave = {
+        adminUpi: settings.adminUpi || '',
+        websiteUrl: settings.websiteUrl || window.location.origin,
+        minWithdrawal: settings.minWithdrawal || 0,
+        minRecharge: settings.minRecharge || 0,
+        withdrawalFee: settings.withdrawalFee || 0,
+        supportTelegram: settings.supportTelegram || '',
+        supportWhatsApp: settings.supportWhatsApp || '',
+        supportEmail: settings.supportEmail || '',
+        supportChannel: settings.supportChannel || '',
+      };
+
+      await setDoc(doc(db, 'system', 'settings'), settingsToSave, { merge: true });
       showToast('Settings saved successfully!', 'success');
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'system/settings');
@@ -367,11 +380,11 @@ const AdminDashboard: React.FC = () => {
     if (!editingPlan) return;
     try {
       await updateDoc(doc(db, 'plans', editingPlan.id), {
-        name: editPlanData.name,
-        price: Number(editPlanData.price),
-        dailyIncome: Number(editPlanData.dailyIncome),
-        validityDays: Number(editPlanData.validityDays),
-        imageUrl: editPlanData.imageUrl
+        name: editPlanData.name || '',
+        price: Number(editPlanData.price) || 0,
+        dailyIncome: Number(editPlanData.dailyIncome) || 0,
+        validityDays: Number(editPlanData.validityDays) || 0,
+        imageUrl: editPlanData.imageUrl || ''
       });
       setEditingPlan(null);
       showToast("Plan updated successfully!", "success");
