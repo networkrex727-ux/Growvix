@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { collection, query, where, getDocs, onSnapshot, updateDoc, doc, increment, addDoc, serverTimestamp, setDoc, getDoc, deleteDoc, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
-import { Transaction, TransactionStatus, TransactionType, UserProfile, SystemSettings, Notification, Plan, InvestmentStatus } from '../types';
+import { Transaction, TransactionStatus, TransactionType, UserProfile, SystemSettings, Notification, Plan, InvestmentStatus, DatabaseMode } from '../types';
 import { handleFirestoreError, OperationType } from '../lib/error-handler';
 import { motion, AnimatePresence } from 'motion/react';
-import { Settings, Users, ArrowUpCircle, ArrowDownCircle, CheckCircle2, XCircle, Clock, Search, Filter, ShieldAlert, ShieldCheck, Edit3, Save, Globe, Smartphone, Banknote, Bell, MoreVertical, LayoutDashboard, MessageSquare, Send, Mail, Phone, Headset, Database, Camera, ShoppingBag } from 'lucide-react';
+import { Settings, Users, ArrowUpCircle, ArrowDownCircle, CheckCircle2, XCircle, Clock, Search, Filter, ShieldAlert, ShieldCheck, Edit3, Save, Globe, Smartphone, Banknote, Bell, MoreVertical, LayoutDashboard, MessageSquare, Send, Mail, Phone, Headset, Database, Camera, ShoppingBag, Server } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -23,7 +23,9 @@ const AdminDashboard: React.FC = () => {
     supportWhatsApp: '+91 98765 43210',
     supportEmail: 'support@growvix.com',
     supportChannel: '@GrowvixOfficial',
-    customFirebase: JSON.parse(localStorage.getItem('GROWVIX_CUSTOM_FIREBASE') || 'null')
+    customFirebase: JSON.parse(localStorage.getItem('GROWVIX_CUSTOM_FIREBASE') || 'null'),
+    databaseMode: DatabaseMode.FIREBASE,
+    sqlConfig: { host: '', user: '', database: '', password: '', port: 3306 }
   });
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'requests' | 'users' | 'settings' | 'overview' | 'database' | 'plans'>('overview');
@@ -84,6 +86,8 @@ const AdminDashboard: React.FC = () => {
           supportWhatsApp: settings.supportWhatsApp || '+91 98765 43210',
           supportEmail: settings.supportEmail || 'support@growvix.com',
           supportChannel: settings.supportChannel || '@GrowvixOfficial',
+          databaseMode: DatabaseMode.FIREBASE,
+          sqlConfig: { host: '', user: '', database: '', password: '', port: 3306 }
         };
         await setDoc(doc(db, 'system', 'settings'), initialSettings);
       }
@@ -339,6 +343,8 @@ const AdminDashboard: React.FC = () => {
         supportWhatsApp: settings.supportWhatsApp || '',
         supportEmail: settings.supportEmail || '',
         supportChannel: settings.supportChannel || '',
+        databaseMode: settings.databaseMode || DatabaseMode.FIREBASE,
+        sqlConfig: settings.sqlConfig || { host: '', user: '', database: '', password: '', port: 3306 },
       };
 
       await setDoc(doc(db, 'system', 'settings'), settingsToSave, { merge: true });
@@ -349,13 +355,50 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
-  const handleSaveDatabase = () => {
-    if (settings.customFirebase && settings.customFirebase.apiKey && settings.customFirebase.projectId) {
-      localStorage.setItem('GROWVIX_CUSTOM_FIREBASE', JSON.stringify(settings.customFirebase));
-      showToast('Database configuration saved! Reloading...', 'success');
-      setTimeout(() => window.location.reload(), 2000);
-    } else {
-      showToast('Please fill in all required Firebase fields', 'error');
+  const handleSaveDatabase = async () => {
+    try {
+      // Save to Firestore first
+      const settingsToSave = {
+        databaseMode: settings.databaseMode,
+        sqlConfig: settings.sqlConfig,
+        customFirebase: settings.customFirebase
+      };
+      await setDoc(doc(db, 'system', 'settings'), settingsToSave, { merge: true });
+
+      if (settings.databaseMode === DatabaseMode.SQL) {
+        if (!settings.sqlConfig?.host || !settings.sqlConfig?.database || !settings.sqlConfig?.user) {
+          showToast('Please fill in all required SQL fields', 'error');
+          return;
+        }
+
+        const response = await fetch('/api/admin/config-database', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode: 'sql', config: settings.sqlConfig })
+        });
+
+        const result = await response.json();
+        if (result.success) {
+          showToast('SQL Database connected and settings saved!', 'success');
+        } else {
+          showToast(result.message || 'Failed to connect to SQL', 'error');
+        }
+      } else {
+        // Firebase Mode
+        if (settings.customFirebase && settings.customFirebase.apiKey && settings.customFirebase.projectId) {
+          localStorage.setItem('GROWVIX_CUSTOM_FIREBASE', JSON.stringify(settings.customFirebase));
+          showToast('Firebase configuration saved! Reloading...', 'success');
+          setTimeout(() => window.location.reload(), 2000);
+        } else {
+          // If using default firebase, just notify
+          showToast('Switched to Default Firebase Mode', 'success');
+          localStorage.removeItem('GROWVIX_CUSTOM_FIREBASE');
+          setTimeout(() => window.location.reload(), 1500);
+        }
+      }
+    } catch (error) {
+      console.error("Save database error:", error);
+      showToast('Failed to save database configuration', 'error');
     }
   };
 
@@ -888,103 +931,227 @@ const AdminDashboard: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-xl font-black text-gray-800 tracking-tight">Database Configuration</h2>
-                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Firebase Connection Settings</p>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Switch between Firebase and Remote SQL</p>
                 </div>
-                <button 
-                  onClick={handleResetFirebase}
-                  className="px-4 py-2 bg-red-50 text-red-600 rounded-xl text-[10px] font-black uppercase border border-red-100 hover:bg-red-600 hover:text-white transition-all"
-                >
-                  Reset to Default
-                </button>
               </div>
 
-              <div className="bg-orange-50 p-6 rounded-[30px] border border-orange-100 space-y-3">
-                <div className="flex items-center gap-3 text-orange-600">
-                  <ShieldAlert size={20} />
-                  <h3 className="font-black uppercase tracking-wider text-xs">Important Instructions</h3>
+              {/* Database Mode Toggle */}
+              <div className="bg-white p-6 rounded-[30px] border border-gray-100 shadow-sm space-y-4">
+                <div className="flex items-center gap-3 text-gray-800">
+                  <Database size={20} />
+                  <h3 className="font-black uppercase tracking-wider text-xs">Active Database Mode</h3>
                 </div>
-                <p className="text-[11px] text-orange-700 font-medium leading-relaxed">
-                  To use your own database, follow these steps:
-                  <br />1. Create a project on <a href="https://console.firebase.google.com" target="_blank" rel="noreferrer" className="underline font-bold">Firebase Console</a>.
-                  <br />2. Enable <span className="font-bold">Authentication</span> (Google Login) and <span className="font-bold">Firestore Database</span>.
-                  <br />3. Create a Web App and copy the configuration details below.
-                  <br />4. After saving, the app will reload and connect to your new database.
-                </p>
+                <div className="grid grid-cols-2 gap-4">
+                  <button 
+                    onClick={() => setSettings({ ...settings, databaseMode: DatabaseMode.FIREBASE })}
+                    className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 ${settings.databaseMode === DatabaseMode.FIREBASE ? 'border-[#ff0000] bg-red-50' : 'border-gray-100 bg-gray-50'}`}
+                  >
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${settings.databaseMode === DatabaseMode.FIREBASE ? 'bg-[#ff0000] text-white' : 'bg-gray-200 text-gray-400'}`}>
+                      <Database size={20} />
+                    </div>
+                    <span className={`text-xs font-black uppercase ${settings.databaseMode === DatabaseMode.FIREBASE ? 'text-[#ff0000]' : 'text-gray-400'}`}>Firebase</span>
+                  </button>
+                  <button 
+                    onClick={() => setSettings({ ...settings, databaseMode: DatabaseMode.SQL })}
+                    className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 ${settings.databaseMode === DatabaseMode.SQL ? 'border-[#ff0000] bg-red-50' : 'border-gray-100 bg-gray-50'}`}
+                  >
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${settings.databaseMode === DatabaseMode.SQL ? 'bg-[#ff0000] text-white' : 'bg-gray-200 text-gray-400'}`}>
+                      <Server size={20} />
+                    </div>
+                    <span className={`text-xs font-black uppercase ${settings.databaseMode === DatabaseMode.SQL ? 'text-[#ff0000]' : 'text-gray-400'}`}>Remote SQL</span>
+                  </button>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-gray-400 uppercase">API Key</label>
-                  <input 
-                    type="text" 
-                    value={settings.customFirebase?.apiKey || ''}
-                    onChange={(e) => setSettings({ 
-                      ...settings, 
-                      customFirebase: { ...(settings.customFirebase || { authDomain: '', projectId: '', appId: '', apiKey: '' }), apiKey: e.target.value } 
-                    })}
-                    placeholder="AIzaSy..."
-                    className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
-                  />
+              {settings.databaseMode === DatabaseMode.FIREBASE ? (
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-black text-gray-800 uppercase tracking-wider">Firebase Settings</h3>
+                    </div>
+                    <button 
+                      onClick={handleResetFirebase}
+                      className="px-4 py-2 bg-red-50 text-red-600 rounded-xl text-[10px] font-black uppercase border border-red-100 hover:bg-red-600 hover:text-white transition-all"
+                    >
+                      Reset to Default
+                    </button>
+                  </div>
+
+                  <div className="bg-orange-50 p-6 rounded-[30px] border border-orange-100 space-y-3">
+                    <div className="flex items-center gap-3 text-orange-600">
+                      <ShieldAlert size={20} />
+                      <h3 className="font-black uppercase tracking-wider text-xs">Important Instructions</h3>
+                    </div>
+                    <p className="text-[11px] text-orange-700 font-medium leading-relaxed">
+                      To use your own database, follow these steps:
+                      <br />1. Create a project on <a href="https://console.firebase.google.com" target="_blank" rel="noreferrer" className="underline font-bold">Firebase Console</a>.
+                      <br />2. Enable <span className="font-bold">Authentication</span> (Google Login) and <span className="font-bold">Firestore Database</span>.
+                      <br />3. Create a Web App and copy the configuration details below.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-gray-400 uppercase">API Key</label>
+                      <input 
+                        type="text" 
+                        value={settings.customFirebase?.apiKey || ''}
+                        onChange={(e) => setSettings({ 
+                          ...settings, 
+                          customFirebase: { ...(settings.customFirebase || { authDomain: '', projectId: '', appId: '', apiKey: '' }), apiKey: e.target.value } 
+                        })}
+                        placeholder="AIzaSy..."
+                        className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-gray-400 uppercase">Project ID</label>
+                      <input 
+                        type="text" 
+                        value={settings.customFirebase?.projectId || ''}
+                        onChange={(e) => setSettings({ 
+                          ...settings, 
+                          customFirebase: { ...(settings.customFirebase || { authDomain: '', projectId: '', appId: '', apiKey: '' }), projectId: e.target.value } 
+                        })}
+                        placeholder="my-project-id"
+                        className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-gray-400 uppercase">Auth Domain</label>
+                      <input 
+                        type="text" 
+                        value={settings.customFirebase?.authDomain || ''}
+                        onChange={(e) => setSettings({ 
+                          ...settings, 
+                          customFirebase: { ...(settings.customFirebase || { authDomain: '', projectId: '', appId: '', apiKey: '' }), authDomain: e.target.value } 
+                        })}
+                        placeholder="my-project.firebaseapp.com"
+                        className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-gray-400 uppercase">App ID</label>
+                      <input 
+                        type="text" 
+                        value={settings.customFirebase?.appId || ''}
+                        onChange={(e) => setSettings({ 
+                          ...settings, 
+                          customFirebase: { ...(settings.customFirebase || { authDomain: '', projectId: '', appId: '', apiKey: '' }), appId: e.target.value } 
+                        })}
+                        placeholder="1:123456789:web:abc123"
+                        className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-gray-400 uppercase">Database ID (Optional)</label>
+                      <input 
+                        type="text" 
+                        value={settings.customFirebase?.firestoreDatabaseId || ''}
+                        onChange={(e) => setSettings({ 
+                          ...settings, 
+                          customFirebase: { ...(settings.customFirebase || { authDomain: '', projectId: '', appId: '', apiKey: '' }), firestoreDatabaseId: e.target.value } 
+                        })}
+                        placeholder="(default)"
+                        className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
+                      />
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-gray-400 uppercase">Project ID</label>
-                  <input 
-                    type="text" 
-                    value={settings.customFirebase?.projectId || ''}
-                    onChange={(e) => setSettings({ 
-                      ...settings, 
-                      customFirebase: { ...(settings.customFirebase || { authDomain: '', projectId: '', appId: '', apiKey: '' }), projectId: e.target.value } 
-                    })}
-                    placeholder="my-project-id"
-                    className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
-                  />
+              ) : (
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-black text-gray-800 uppercase tracking-wider">Remote SQL Settings</h3>
+                    </div>
+                  </div>
+
+                  <div className="bg-blue-50 p-6 rounded-[30px] border border-blue-100 space-y-3">
+                    <div className="flex items-center gap-3 text-blue-600">
+                      <Server size={20} />
+                      <h3 className="font-black uppercase tracking-wider text-xs">SQL Configuration</h3>
+                    </div>
+                    <p className="text-[11px] text-blue-700 font-medium leading-relaxed">
+                      Enter your remote MySQL/PostgreSQL details. The backend will use these to connect.
+                      <br /><span className="font-bold">Note:</span> Ensure your database allows connections from this server's IP.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-gray-400 uppercase">Host</label>
+                      <input 
+                        type="text" 
+                        value={settings.sqlConfig?.host || ''}
+                        onChange={(e) => setSettings({ 
+                          ...settings, 
+                          sqlConfig: { ...(settings.sqlConfig || { host: '', user: '', database: '', password: '', port: 3306 }), host: e.target.value } 
+                        })}
+                        placeholder="localhost or IP"
+                        className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-gray-400 uppercase">Database Name</label>
+                      <input 
+                        type="text" 
+                        value={settings.sqlConfig?.database || ''}
+                        onChange={(e) => setSettings({ 
+                          ...settings, 
+                          sqlConfig: { ...(settings.sqlConfig || { host: '', user: '', database: '', password: '', port: 3306 }), database: e.target.value } 
+                        })}
+                        placeholder="my_database"
+                        className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-gray-400 uppercase">Username</label>
+                      <input 
+                        type="text" 
+                        value={settings.sqlConfig?.user || ''}
+                        onChange={(e) => setSettings({ 
+                          ...settings, 
+                          sqlConfig: { ...(settings.sqlConfig || { host: '', user: '', database: '', password: '', port: 3306 }), user: e.target.value } 
+                        })}
+                        placeholder="root"
+                        className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-gray-400 uppercase">Password</label>
+                      <input 
+                        type="password" 
+                        value={settings.sqlConfig?.password || ''}
+                        onChange={(e) => setSettings({ 
+                          ...settings, 
+                          sqlConfig: { ...(settings.sqlConfig || { host: '', user: '', database: '', password: '', port: 3306 }), password: e.target.value } 
+                        })}
+                        placeholder="********"
+                        className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-gray-400 uppercase">Port</label>
+                      <input 
+                        type="number" 
+                        value={settings.sqlConfig?.port || 3306}
+                        onChange={(e) => setSettings({ 
+                          ...settings, 
+                          sqlConfig: { ...(settings.sqlConfig || { host: '', user: '', database: '', password: '', port: 3306 }), port: parseInt(e.target.value) } 
+                        })}
+                        placeholder="3306"
+                        className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
+                      />
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-gray-400 uppercase">Auth Domain</label>
-                  <input 
-                    type="text" 
-                    value={settings.customFirebase?.authDomain || ''}
-                    onChange={(e) => setSettings({ 
-                      ...settings, 
-                      customFirebase: { ...(settings.customFirebase || { authDomain: '', projectId: '', appId: '', apiKey: '' }), authDomain: e.target.value } 
-                    })}
-                    placeholder="my-project.firebaseapp.com"
-                    className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-gray-400 uppercase">App ID</label>
-                  <input 
-                    type="text" 
-                    value={settings.customFirebase?.appId || ''}
-                    onChange={(e) => setSettings({ 
-                      ...settings, 
-                      customFirebase: { ...(settings.customFirebase || { authDomain: '', projectId: '', appId: '', apiKey: '' }), appId: e.target.value } 
-                    })}
-                    placeholder="1:123456789:web:abc123"
-                    className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-gray-400 uppercase">Database ID (Optional)</label>
-                  <input 
-                    type="text" 
-                    value={settings.customFirebase?.firestoreDatabaseId || ''}
-                    onChange={(e) => setSettings({ 
-                      ...settings, 
-                      customFirebase: { ...(settings.customFirebase || { authDomain: '', projectId: '', appId: '', apiKey: '' }), firestoreDatabaseId: e.target.value } 
-                    })}
-                    placeholder="(default)"
-                    className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
-                  />
-                </div>
-              </div>
+              )}
 
               <button 
                 onClick={handleSaveDatabase}
                 className="w-full bg-[#ff0000] text-white py-4 rounded-2xl font-black shadow-xl shadow-red-100 active:scale-95 transition-transform flex items-center justify-center gap-2"
               >
-                <Save size={20} /> Update Database Configuration
+                <Save size={20} /> Save Database Configuration
               </button>
             </div>
           )}

@@ -42,6 +42,19 @@ export interface UserProfile {
   createdAt: string;
 }
 
+export enum DatabaseMode {
+  FIREBASE = 'firebase',
+  SQL = 'sql',
+}
+
+export interface SqlConfig {
+  host: string;
+  user: string;
+  password?: string;
+  database: string;
+  port?: number;
+}
+
 export interface FirebaseConfig {
   apiKey: string;
   authDomain: string;
@@ -63,6 +76,8 @@ export interface SystemSettings {
   supportEmail?: string;
   supportChannel?: string;
   customFirebase?: FirebaseConfig;
+  databaseMode: DatabaseMode;
+  sqlConfig?: SqlConfig;
 }
 
 export interface Plan {
