@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp, query, collection, where, getDocs } from 'firebase/firestore';
 import { auth, db } from '../firebase';
+import { DatabaseService } from '../services/DatabaseService';
 import { useToast } from '../context/ToastContext';
 import { UserRole } from '../types';
 import { motion } from 'motion/react';
@@ -20,6 +21,10 @@ const Register: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
+  useEffect(() => {
+    DatabaseService.init();
+  }, []);
+
   const generateReferralCode = () => {
     return Math.random().toString(36).substring(2, 8).toUpperCase();
   };
@@ -34,19 +39,44 @@ const Register: React.FC = () => {
     setLoading(true);
     try {
       const normalizedEmail = email.toLowerCase().trim();
-      // 1. Create Auth User
-      const userCredential = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
-      const user = userCredential.user;
+      let user;
+      
+      try {
+        // 1. Create Auth User
+        const userCredential = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
+        user = userCredential.user;
+      } catch (authError: any) {
+        if (authError.code === 'auth/email-already-in-use') {
+          // If email exists, check if they have a profile in the current database
+          // This allows users to "re-register" their profile if switching databases
+          showToast("Email already exists. Checking profile...", "info");
+          // We can't easily "log in" here to get the UID without the password, 
+          // but we can try to sign in with the provided password to verify they own it.
+          try {
+            const loginRes = await signInWithEmailAndPassword(auth, normalizedEmail, password);
+            user = loginRes.user;
+          } catch (loginError: any) {
+            throw new Error("Email already in use. Please use the correct password to link your account.");
+          }
+        } else {
+          throw authError;
+        }
+      }
 
       try {
+        // Check if profile already exists in current database
+        const existingProfile = await DatabaseService.getUserProfile(user.uid);
+        if (existingProfile) {
+          showToast("Profile already exists! Redirecting...", "success");
+          navigate('/');
+          return;
+        }
+
         // 2. Find Referrer if referralCode provided
         let referredBy = '';
         if (referralCode) {
-          const q = query(collection(db, 'users'), where('referralCode', '==', referralCode.trim().toUpperCase()));
-          const querySnapshot = await getDocs(q);
-          if (!querySnapshot.empty) {
-            referredBy = querySnapshot.docs[0].id;
-          }
+          const referrerUid = await DatabaseService.findUserByReferralCode(referralCode);
+          if (referrerUid) referredBy = referrerUid;
         }
 
         // 3. Create User Profile
@@ -66,14 +96,12 @@ const Register: React.FC = () => {
           createdAt: new Date().toISOString(),
         };
 
-        await setDoc(doc(db, 'users', user.uid), userProfile);
+        await DatabaseService.registerUser(userProfile);
         showToast("Registration successful!", "success");
         navigate('/');
       } catch (firestoreError: any) {
-        console.error("Firestore setup error, rolling back auth:", firestoreError);
-        // Delete the auth user if profile creation fails so they can retry
-        await user.delete();
-        throw firestoreError;
+        console.error("Profile setup error:", firestoreError);
+        showToast("Failed to create profile. Please try again.", "error");
       }
     } catch (error: any) {
       console.error("Registration error:", error);

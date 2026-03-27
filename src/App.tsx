@@ -3,7 +3,8 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'r
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from './firebase';
-import { UserProfile, UserRole } from './types';
+import { DatabaseService } from './services/DatabaseService';
+import { UserProfile, UserRole, DatabaseMode } from './types';
 import { handleFirestoreError, OperationType } from './lib/error-handler';
 
 // Components
@@ -144,20 +145,38 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    DatabaseService.init();
+
     const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       if (firebaseUser) {
-        // Listen to profile changes
-        const unsubscribeProfile = onSnapshot(doc(db, 'users', firebaseUser.uid), (docSnap) => {
-          if (docSnap.exists()) {
-            setProfile(docSnap.data() as UserProfile);
-          }
-          setLoading(false);
-        }, (error) => {
-          handleFirestoreError(error, OperationType.GET, `users/${firebaseUser.uid}`);
-          setLoading(false);
-        });
-        return () => unsubscribeProfile();
+        // Check database mode
+        const mode = DatabaseService.getMode();
+        
+        if (mode === DatabaseMode.SQL) {
+          // For SQL, we do a periodic fetch or single fetch for now
+          const fetchProfile = async () => {
+            const p = await DatabaseService.getUserProfile(firebaseUser.uid);
+            setProfile(p);
+            setLoading(false);
+          };
+          fetchProfile();
+          // Poll every 10 seconds for profile updates in SQL mode
+          const interval = setInterval(fetchProfile, 10000);
+          return () => clearInterval(interval);
+        } else {
+          // Listen to profile changes in Firebase
+          const unsubscribeProfile = onSnapshot(doc(db, 'users', firebaseUser.uid), (docSnap) => {
+            if (docSnap.exists()) {
+              setProfile(docSnap.data() as UserProfile);
+            }
+            setLoading(false);
+          }, (error) => {
+            handleFirestoreError(error, OperationType.GET, `users/${firebaseUser.uid}`);
+            setLoading(false);
+          });
+          return () => unsubscribeProfile();
+        }
       } else {
         setProfile(null);
         setLoading(false);

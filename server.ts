@@ -183,6 +183,59 @@ async function startServer() {
     }
   });
 
+  // SQL Auth & User Routes
+  app.post("/api/sql/register", async (req, res) => {
+    if (!sqlPool) return res.status(500).json({ success: false, message: "SQL not connected" });
+    const { uid, phone, email, referralCode, referredBy, role } = req.body;
+    try {
+      await sqlPool.query(
+        "INSERT INTO users (uid, phone, email, referralCode, referredBy, role) VALUES (?, ?, ?, ?, ?, ?)",
+        [uid, phone, email, referralCode, referredBy, role]
+      );
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.get("/api/sql/profile/:uid", async (req, res) => {
+    if (!sqlPool) return res.status(500).json({ success: false, message: "SQL not connected" });
+    try {
+      const [rows]: any = await sqlPool.query("SELECT * FROM users WHERE uid = ?", [req.params.uid]);
+      if (rows.length > 0) {
+        res.json({ success: true, data: rows[0] });
+      } else {
+        res.status(404).json({ success: false, message: "User not found" });
+      }
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.get("/api/sql/plans", async (req, res) => {
+    if (!sqlPool) return res.status(500).json({ success: false, message: "SQL not connected" });
+    try {
+      const [rows]: any = await sqlPool.query("SELECT * FROM plans");
+      res.json({ success: true, data: rows });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.get("/api/sql/find-referrer/:code", async (req, res) => {
+    if (!sqlPool) return res.status(500).json({ success: false, message: "SQL not connected" });
+    try {
+      const [rows]: any = await sqlPool.query("SELECT uid FROM users WHERE referralCode = ?", [req.params.code.toUpperCase()]);
+      if (rows.length > 0) {
+        res.json({ success: true, uid: rows[0].uid });
+      } else {
+        res.status(404).json({ success: false, message: "Referrer not found" });
+      }
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
