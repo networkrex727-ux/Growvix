@@ -84,11 +84,7 @@ const Home: React.FC = () => {
       </div>
 
       {/* Balance Card */}
-      <motion.div 
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        className="bg-gradient-to-br from-[#ff0000] to-[#cc0000] rounded-[35px] p-8 text-white shadow-[0_20px_40px_rgba(255,0,0,0.2)] relative overflow-hidden"
-      >
+      <div className="bg-gradient-to-br from-[#ff0000] to-[#cc0000] rounded-3xl p-8 text-white shadow-lg relative overflow-hidden">
         {/* Decorative Elements */}
         <div className="absolute -right-10 -top-10 w-40 h-40 bg-white/10 rounded-full blur-3xl" />
         <div className="absolute -left-10 -bottom-10 w-40 h-40 bg-black/10 rounded-full blur-3xl" />
@@ -98,7 +94,7 @@ const Home: React.FC = () => {
             <div>
               <div className="flex items-center gap-2">
                 <p className="text-white/80 text-[10px] font-black uppercase tracking-[0.2em]">Real Balance</p>
-                <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse shadow-[0_0_8px_rgba(74,222,128,0.8)]" />
+                <div className="w-1.5 h-1.5 bg-green-400 rounded-full shadow-[0_0_8px_rgba(74,222,128,0.8)]" />
               </div>
               <h2 className="text-2xl font-black mt-2 drop-shadow-md truncate">₹{profile?.balance?.toFixed(2) || '0.00'}</h2>
             </div>
@@ -119,19 +115,19 @@ const Home: React.FC = () => {
           <div className="mt-8 flex gap-4">
             <button 
               onClick={() => navigate('/recharge')}
-              className="flex-1 bg-white text-[#ff0000] py-4 rounded-2xl font-black text-sm shadow-xl active:scale-95 transition-all hover:shadow-white/20"
+              className="flex-1 bg-white text-[#ff0000] py-4 rounded-2xl font-black text-sm shadow-md active:bg-gray-100 transition-colors"
             >
               Recharge
             </button>
             <button 
               onClick={() => navigate('/withdraw')}
-              className="flex-1 bg-black/20 backdrop-blur-md text-white py-4 rounded-2xl font-black text-sm shadow-xl active:scale-95 transition-all border border-white/20 hover:bg-black/30"
+              className="flex-1 bg-black/20 backdrop-blur-md text-white py-4 rounded-2xl font-black text-sm shadow-md border border-white/20 active:bg-black/40 transition-colors"
             >
               Withdraw
             </button>
           </div>
         </div>
-      </motion.div>
+      </div>
 
       {/* Action Grid */}
       <div className="grid grid-cols-4 gap-4">
@@ -141,7 +137,7 @@ const Home: React.FC = () => {
             onClick={() => navigate(action.path)}
             className="flex flex-col items-center gap-2 group"
           >
-            <div className={`w-14 h-14 bg-white rounded-2xl flex items-center justify-center shadow-sm group-active:scale-90 transition-transform`}>
+            <div className={`w-14 h-14 bg-white rounded-2xl flex items-center justify-center shadow-sm active:bg-gray-50 transition-colors`}>
               <action.icon className={action.color} size={28} />
             </div>
             <span className="text-xs font-semibold text-gray-600">{action.label}</span>
@@ -197,7 +193,7 @@ const Home: React.FC = () => {
           </div>
           <button 
             onClick={() => navigate('/check-in')}
-            className="bg-[#ff0000] text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md active:scale-95 transition-transform"
+            className="bg-[#ff0000] text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md active:bg-red-700 transition-colors"
           >
             Check-in
           </button>

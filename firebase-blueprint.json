@@ -80,6 +80,23 @@
         "createdAt": { "type": "object" }
       },
       "required": ["userId", "title", "message", "type", "read", "createdAt"]
+    },
+    "Coupon": {
+      "title": "Coupon Code",
+      "description": "Redeemable coupon codes for bonus balance",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "code": { "type": "string" },
+        "rewardAmount": { "type": "number" },
+        "usageLimit": { "type": "number" },
+        "usedCount": { "type": "number" },
+        "expiryDate": { "type": "string", "format": "date-time" },
+        "isActive": { "type": "boolean" },
+        "usedBy": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "code", "rewardAmount", "usageLimit", "usedCount", "expiryDate", "isActive", "usedBy", "createdAt"]
     }
   },
   "firestore": {
@@ -102,6 +119,10 @@
     "/notifications/{notificationId}": {
       "schema": "Notification",
       "description": "User notifications"
+    },
+    "/coupons/{couponId}": {
+      "schema": "Coupon",
+      "description": "Coupon codes"
     }
   }
 }

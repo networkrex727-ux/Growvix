@@ -146,17 +146,15 @@ const Product: React.FC = () => {
 
       <div className="grid grid-cols-1 gap-6">
         {plans.map((plan) => (
-          <motion.div
+          <div
             key={plan.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-white rounded-[25px] overflow-hidden shadow-md border border-gray-50 group"
+            className="bg-white rounded-3xl overflow-hidden shadow-md border border-gray-50"
           >
             <div className="relative h-40">
               <img 
                 src={plan.imageUrl} 
                 alt={plan.name} 
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                className="w-full h-full object-cover"
                 referrerPolicy="no-referrer"
               />
               <div className="absolute top-4 right-4 bg-[#ff0000] text-white px-3 py-1 rounded-full text-xs font-bold shadow-lg">
@@ -201,13 +199,13 @@ const Product: React.FC = () => {
                 <button
                   onClick={() => handleInvest(plan)}
                   disabled={investing === plan.id}
-                  className="flex-1 bg-gradient-to-r from-[#ff0000] to-[#cc0000] text-white py-3 rounded-2xl font-bold text-sm shadow-lg active:scale-95 transition-transform disabled:opacity-50"
+                  className="flex-1 bg-[#ff0000] text-white py-3 rounded-2xl font-bold text-sm shadow-md active:bg-red-700 transition-colors disabled:opacity-50"
                 >
                   {investing === plan.id ? 'Processing...' : 'Invest Now'}
                 </button>
               </div>
             </div>
-          </motion.div>
+          </div>
         ))}
       </div>
     </div>

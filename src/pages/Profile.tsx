@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { signOut } from 'firebase/auth';
 import { auth } from '../firebase';
 import { useAuth } from '../App';
-import { User, Wallet, ArrowUpCircle, ArrowDownCircle, Users, ShieldCheck, Info, Headset, LogOut, ChevronRight, Settings, TrendingUp, Bell } from 'lucide-react';
+import { User, Wallet, ArrowUpCircle, ArrowDownCircle, Users, ShieldCheck, Info, Headset, LogOut, ChevronRight, Settings, TrendingUp, Bell, Ticket, Gift } from 'lucide-react';
 import { motion } from 'motion/react';
 
 const Profile: React.FC = () => {
@@ -21,6 +21,7 @@ const Profile: React.FC = () => {
 
   const menuItems = [
     { label: 'My Investments', icon: TrendingUp, path: '/my-investments', color: 'text-[#ff0000]' },
+    { label: 'Redeem Code', icon: Gift, path: '/redeem-code', color: 'text-red-600' },
     { label: 'Notifications', icon: Bell, path: '/notifications', color: 'text-red-500' },
     { label: 'Recharge History', icon: ArrowUpCircle, path: '/history?type=recharge', color: 'text-red-500' },
     { label: 'Withdraw History', icon: ArrowDownCircle, path: '/history?type=withdraw', color: 'text-blue-500' },
@@ -58,11 +59,7 @@ const Profile: React.FC = () => {
       </div>
 
       {/* Wallet Card */}
-      <motion.div 
-        initial={{ y: 20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        className="bg-white rounded-[25px] p-6 shadow-md border border-gray-50 flex items-center justify-between"
-      >
+      <div className="bg-white rounded-3xl p-6 shadow-md border border-gray-50 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 bg-red-50 rounded-2xl flex items-center justify-center">
             <Wallet className="text-[#ff0000]" size={24} />
@@ -75,29 +72,29 @@ const Profile: React.FC = () => {
         <div className="flex flex-col gap-2">
           <button 
             onClick={() => navigate('/recharge')}
-            className="bg-[#ff0000] text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md active:scale-95 transition-transform"
+            className="bg-[#ff0000] text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md active:bg-red-700 transition-colors"
           >
             Recharge
           </button>
           <button 
             onClick={() => navigate('/withdraw')}
-            className="bg-gray-100 text-gray-600 px-4 py-2 rounded-xl text-xs font-bold active:scale-95 transition-transform"
+            className="bg-gray-100 text-gray-600 px-4 py-2 rounded-xl text-xs font-bold active:bg-gray-200 transition-colors"
           >
             Withdraw
           </button>
         </div>
-      </motion.div>
+      </div>
 
       {/* Menu List */}
-      <div className="bg-white rounded-[25px] shadow-md border border-gray-50 overflow-hidden divide-y divide-gray-50">
+      <div className="bg-white rounded-3xl shadow-md border border-gray-50 overflow-hidden divide-y divide-gray-50">
         {menuItems.map((item) => (
           <button
             key={item.label}
             onClick={() => navigate(item.path)}
-            className="w-full flex items-center justify-between p-4 hover:bg-gray-50 active:bg-gray-100 transition-colors group"
+            className="w-full flex items-center justify-between p-4 active:bg-gray-50 transition-colors group"
           >
             <div className="flex items-center gap-4">
-              <div className={`w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform`}>
+              <div className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center">
                 <item.icon className={item.color} size={20} />
               </div>
               <span className="text-sm font-bold text-gray-700">{item.label}</span>

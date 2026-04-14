@@ -99,11 +99,7 @@ const Team: React.FC = () => {
       </div>
 
       {/* Referral Link Card */}
-      <motion.div 
-        initial={{ scale: 0.95, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        className="bg-white rounded-[25px] p-6 shadow-md border border-gray-50 space-y-4"
-      >
+      <div className="bg-white rounded-3xl p-6 shadow-md border border-gray-50 space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <UserPlus className="text-[#ff0000]" size={20} />
@@ -120,7 +116,7 @@ const Team: React.FC = () => {
           </p>
           <button 
             onClick={copyReferralLink}
-            className="bg-[#ff0000] text-white p-2 rounded-xl shadow-md active:scale-90 transition-transform"
+            className="bg-[#ff0000] text-white p-2 rounded-xl shadow-md active:bg-red-700 transition-colors"
           >
             <Copy size={18} />
           </button>
@@ -129,7 +125,7 @@ const Team: React.FC = () => {
         <p className="text-[10px] text-gray-400 font-medium text-center">
           Share your link and earn up to 17% commission from your team's investment.
         </p>
-      </motion.div>
+      </div>
 
       {/* Team Stats Grid */}
       <div className="grid grid-cols-2 gap-4">

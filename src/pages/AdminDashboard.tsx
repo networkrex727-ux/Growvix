@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { collection, query, where, getDocs, onSnapshot, updateDoc, doc, increment, addDoc, serverTimestamp, setDoc, getDoc, deleteDoc, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
-import { Transaction, TransactionStatus, TransactionType, UserProfile, SystemSettings, Notification, Plan, InvestmentStatus, DatabaseMode } from '../types';
+import { Transaction, TransactionStatus, TransactionType, UserProfile, SystemSettings, Notification, Plan, InvestmentStatus, Coupon } from '../types';
 import { handleFirestoreError, OperationType } from '../lib/error-handler';
 import { motion, AnimatePresence } from 'motion/react';
-import { Settings, Users, ArrowUpCircle, ArrowDownCircle, CheckCircle2, XCircle, Clock, Search, Filter, ShieldAlert, ShieldCheck, Edit3, Save, Globe, Smartphone, Banknote, Bell, MoreVertical, LayoutDashboard, MessageSquare, Send, Mail, Phone, Headset, Database, Camera, ShoppingBag, Server } from 'lucide-react';
+import { Settings, Users, ArrowUpCircle, ArrowDownCircle, CheckCircle2, XCircle, Clock, Search, Filter, ShieldAlert, ShieldCheck, Edit3, Save, Globe, Smartphone, Banknote, Bell, MoreVertical, LayoutDashboard, MessageSquare, Send, Mail, Phone, Headset, Camera, ShoppingBag, Ticket, Trash2, Plus } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -24,12 +24,12 @@ const AdminDashboard: React.FC = () => {
     supportEmail: 'support@growvix.com',
     supportChannel: '@GrowvixOfficial',
     customFirebase: JSON.parse(localStorage.getItem('GROWVIX_CUSTOM_FIREBASE') || 'null'),
-    databaseMode: DatabaseMode.FIREBASE,
-    sqlConfig: { host: '', user: '', database: '', password: '', port: 3306 }
   });
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'requests' | 'users' | 'settings' | 'overview' | 'database' | 'plans'>('overview');
+  const [activeTab, setActiveTab] = useState<'requests' | 'users' | 'settings' | 'overview' | 'plans' | 'coupons'>('overview');
   const [plans, setPlans] = useState<Plan[]>([]);
+  const [coupons, setCoupons] = useState<Coupon[]>([]);
+  const [newCoupon, setNewCoupon] = useState({ code: '', rewardAmount: 0, usageLimit: 1, expiryDate: '' });
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
   const [editPlanData, setEditPlanData] = useState<Partial<Plan>>({});
   const [requestType, setRequestType] = useState<'recharge' | 'withdraw'>('recharge');
@@ -60,6 +60,12 @@ const AdminDashboard: React.FC = () => {
       setPlans(plansData);
     });
 
+    // Listen to coupons real-time
+    const unsubscribeCoupons = onSnapshot(collection(db, 'coupons'), (snapshot) => {
+      const couponsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Coupon));
+      setCoupons(couponsData);
+    });
+
     // Fetch settings
     const fetchSettings = async () => {
       const settingsDoc = await getDoc(doc(db, 'system', 'settings'));
@@ -86,8 +92,6 @@ const AdminDashboard: React.FC = () => {
           supportWhatsApp: settings.supportWhatsApp || '+91 98765 43210',
           supportEmail: settings.supportEmail || 'support@growvix.com',
           supportChannel: settings.supportChannel || '@GrowvixOfficial',
-          databaseMode: DatabaseMode.FIREBASE,
-          sqlConfig: { host: '', user: '', database: '', password: '', port: 3306 }
         };
         await setDoc(doc(db, 'system', 'settings'), initialSettings);
       }
@@ -98,6 +102,7 @@ const AdminDashboard: React.FC = () => {
       unsubscribeTransactions();
       unsubscribeUsers();
       unsubscribePlans();
+      unsubscribeCoupons();
     };
   }, []);
 
@@ -343,8 +348,6 @@ const AdminDashboard: React.FC = () => {
         supportWhatsApp: settings.supportWhatsApp || '',
         supportEmail: settings.supportEmail || '',
         supportChannel: settings.supportChannel || '',
-        databaseMode: settings.databaseMode || DatabaseMode.FIREBASE,
-        sqlConfig: settings.sqlConfig || { host: '', user: '', database: '', password: '', port: 3306 },
       };
 
       await setDoc(doc(db, 'system', 'settings'), settingsToSave, { merge: true });
@@ -353,59 +356,6 @@ const AdminDashboard: React.FC = () => {
       handleFirestoreError(error, OperationType.WRITE, 'system/settings');
       showToast('Failed to save settings', 'error');
     }
-  };
-
-  const handleSaveDatabase = async () => {
-    try {
-      // Save to Firestore first
-      const settingsToSave = {
-        databaseMode: settings.databaseMode,
-        sqlConfig: settings.sqlConfig,
-        customFirebase: settings.customFirebase
-      };
-      await setDoc(doc(db, 'system', 'settings'), settingsToSave, { merge: true });
-
-      if (settings.databaseMode === DatabaseMode.SQL) {
-        if (!settings.sqlConfig?.host || !settings.sqlConfig?.database || !settings.sqlConfig?.user) {
-          showToast('Please fill in all required SQL fields', 'error');
-          return;
-        }
-
-        const response = await fetch('/api/admin/config-database', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mode: 'sql', config: settings.sqlConfig })
-        });
-
-        const result = await response.json();
-        if (result.success) {
-          showToast('SQL Database connected and settings saved!', 'success');
-        } else {
-          showToast(result.message || 'Failed to connect to SQL', 'error');
-        }
-      } else {
-        // Firebase Mode
-        if (settings.customFirebase && settings.customFirebase.apiKey && settings.customFirebase.projectId) {
-          localStorage.setItem('GROWVIX_CUSTOM_FIREBASE', JSON.stringify(settings.customFirebase));
-          showToast('Firebase configuration saved! Reloading...', 'success');
-          setTimeout(() => window.location.reload(), 2000);
-        } else {
-          // If using default firebase, just notify
-          showToast('Switched to Default Firebase Mode', 'success');
-          localStorage.removeItem('GROWVIX_CUSTOM_FIREBASE');
-          setTimeout(() => window.location.reload(), 1500);
-        }
-      }
-    } catch (error) {
-      console.error("Save database error:", error);
-      showToast('Failed to save database configuration', 'error');
-    }
-  };
-
-  const handleResetFirebase = () => {
-    localStorage.removeItem('GROWVIX_CUSTOM_FIREBASE');
-    showToast('Firebase reset to default! Reloading...', 'success');
-    setTimeout(() => window.location.reload(), 1500);
   };
 
   const handleDeletePlan = async (planId: string) => {
@@ -462,6 +412,47 @@ const AdminDashboard: React.FC = () => {
       showToast("Failed to restore default plans", "error");
     } finally {
       setProcessing(null);
+    }
+  };
+
+  const handleAddCoupon = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCoupon.code || newCoupon.rewardAmount <= 0) {
+      showToast("Please fill all required fields", "warning");
+      return;
+    }
+
+    setProcessing('add-coupon');
+    try {
+      const couponData: Omit<Coupon, 'id'> = {
+        code: newCoupon.code.toUpperCase().trim(),
+        rewardAmount: Number(newCoupon.rewardAmount),
+        usageLimit: Number(newCoupon.usageLimit),
+        usedCount: 0,
+        expiryDate: new Date(newCoupon.expiryDate).toISOString(),
+        isActive: true,
+        usedBy: [],
+        createdAt: new Date().toISOString()
+      };
+
+      await addDoc(collection(db, 'coupons'), couponData);
+      setNewCoupon({ code: '', rewardAmount: 0, usageLimit: 1, expiryDate: '' });
+      showToast("Coupon added successfully!", "success");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'coupons');
+      showToast("Failed to add coupon", "error");
+    } finally {
+      setProcessing(null);
+    }
+  };
+
+  const handleDeleteCoupon = async (id: string) => {
+    if (!window.confirm("Delete this coupon?")) return;
+    try {
+      await deleteDoc(doc(db, 'coupons', id));
+      showToast("Coupon deleted", "success");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `coupons/${id}`);
     }
   };
 
@@ -523,9 +514,9 @@ const AdminDashboard: React.FC = () => {
                         { id: 'requests', label: 'Requests', icon: Clock },
                         { id: 'users', label: 'Users', icon: Users },
                         { id: 'plans', label: 'Manage Plans', icon: ShoppingBag },
+                        { id: 'coupons', label: 'Coupons', icon: Ticket },
                         { id: 'add-plan', label: 'Add Plan', icon: Camera, action: () => navigate('/admin/add-plan') },
                         { id: 'settings', label: 'Settings', icon: Settings },
-                        { id: 'database', label: 'Database', icon: Database },
                       ].map((item) => (
                         <button
                           key={item.id}
@@ -610,6 +601,13 @@ const AdminDashboard: React.FC = () => {
               >
                 <ShoppingBag size={24} />
                 <span className="text-[10px] font-black uppercase">Manage Plans</span>
+              </button>
+              <button 
+                onClick={() => setActiveTab('coupons')}
+                className="p-4 bg-blue-50 text-blue-600 rounded-2xl border border-blue-100 flex flex-col items-center gap-2 active:scale-95 transition-transform"
+              >
+                <Ticket size={24} />
+                <span className="text-[10px] font-black uppercase">Coupons</span>
               </button>
               <button 
                 onClick={() => setActiveTab('settings')}
@@ -926,233 +924,110 @@ const AdminDashboard: React.FC = () => {
             </div>
           )}
 
-          {activeTab === 'database' && (
-            <div className="space-y-6 p-2">
+          {activeTab === 'coupons' && (
+            <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-xl font-black text-gray-800 tracking-tight">Database Configuration</h2>
-                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Switch between Firebase and Remote SQL</p>
+                  <h2 className="text-xl font-black text-gray-800 tracking-tight">Manage Coupons</h2>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Create and Track Redeemable Codes</p>
                 </div>
               </div>
 
-              {/* Database Mode Toggle */}
-              <div className="bg-white p-6 rounded-[30px] border border-gray-100 shadow-sm space-y-4">
-                <div className="flex items-center gap-3 text-gray-800">
-                  <Database size={20} />
-                  <h3 className="font-black uppercase tracking-wider text-xs">Active Database Mode</h3>
+              {/* Add Coupon Form */}
+              <form onSubmit={handleAddCoupon} className="bg-gray-50 p-6 rounded-[30px] border border-gray-100 space-y-4">
+                <div className="flex items-center gap-3 text-gray-800 mb-2">
+                  <Plus size={20} className="text-[#ff0000]" />
+                  <h3 className="font-black uppercase tracking-wider text-xs">Create New Coupon</h3>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <button 
-                    onClick={() => setSettings({ ...settings, databaseMode: DatabaseMode.FIREBASE })}
-                    className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 ${settings.databaseMode === DatabaseMode.FIREBASE ? 'border-[#ff0000] bg-red-50' : 'border-gray-100 bg-gray-50'}`}
-                  >
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${settings.databaseMode === DatabaseMode.FIREBASE ? 'bg-[#ff0000] text-white' : 'bg-gray-200 text-gray-400'}`}>
-                      <Database size={20} />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase">Coupon Code</label>
+                    <input 
+                      type="text" 
+                      value={newCoupon.code}
+                      onChange={(e) => setNewCoupon({ ...newCoupon, code: e.target.value })}
+                      placeholder="GROWVIX50"
+                      className="w-full bg-white border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase">Reward Amount (₹)</label>
+                    <input 
+                      type="number" 
+                      value={newCoupon.rewardAmount}
+                      onChange={(e) => setNewCoupon({ ...newCoupon, rewardAmount: parseFloat(e.target.value) })}
+                      placeholder="50"
+                      className="w-full bg-white border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase">Usage Limit</label>
+                    <input 
+                      type="number" 
+                      value={newCoupon.usageLimit}
+                      onChange={(e) => setNewCoupon({ ...newCoupon, usageLimit: parseInt(e.target.value) })}
+                      placeholder="100"
+                      className="w-full bg-white border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase">Expiry Date</label>
+                    <input 
+                      type="date" 
+                      value={newCoupon.expiryDate}
+                      onChange={(e) => setNewCoupon({ ...newCoupon, expiryDate: e.target.value })}
+                      className="w-full bg-white border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
+                    />
+                  </div>
+                </div>
+                <button 
+                  type="submit"
+                  disabled={processing === 'add-coupon'}
+                  className="w-full bg-[#ff0000] text-white py-4 rounded-2xl font-black shadow-lg shadow-red-100 active:scale-95 transition-transform flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  <Plus size={20} /> {processing === 'add-coupon' ? 'Creating...' : 'Create Coupon'}
+                </button>
+              </form>
+
+              {/* Coupons List */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest px-2">Active Coupons</h3>
+                <div className="grid grid-cols-1 gap-4">
+                  {coupons.length > 0 ? (
+                    coupons.map((coupon) => (
+                      <div key={coupon.id} className="bg-white p-5 rounded-[25px] border border-gray-100 shadow-sm flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-500">
+                            <Ticket size={24} />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-black text-gray-800">{coupon.code}</p>
+                              <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase ${coupon.isActive ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                                {coupon.isActive ? 'Active' : 'Inactive'}
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-gray-400 font-bold">
+                              ₹{coupon.rewardAmount} • {coupon.usedCount}/{coupon.usageLimit} Used • Exp: {new Date(coupon.expiryDate).toLocaleDateString()}
+                            </p>
+                          </div>
+                        </div>
+                        <button 
+                          onClick={() => handleDeleteCoupon(coupon.id)}
+                          className="p-2.5 bg-red-50 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-all"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-10 bg-gray-50 rounded-[30px] border border-dashed border-gray-200">
+                      <Ticket size={40} className="mx-auto text-gray-300 mb-2" />
+                      <p className="text-sm text-gray-400 font-bold">No coupons found</p>
                     </div>
-                    <span className={`text-xs font-black uppercase ${settings.databaseMode === DatabaseMode.FIREBASE ? 'text-[#ff0000]' : 'text-gray-400'}`}>Firebase</span>
-                  </button>
-                  <button 
-                    onClick={() => setSettings({ ...settings, databaseMode: DatabaseMode.SQL })}
-                    className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 ${settings.databaseMode === DatabaseMode.SQL ? 'border-[#ff0000] bg-red-50' : 'border-gray-100 bg-gray-50'}`}
-                  >
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${settings.databaseMode === DatabaseMode.SQL ? 'bg-[#ff0000] text-white' : 'bg-gray-200 text-gray-400'}`}>
-                      <Server size={20} />
-                    </div>
-                    <span className={`text-xs font-black uppercase ${settings.databaseMode === DatabaseMode.SQL ? 'text-[#ff0000]' : 'text-gray-400'}`}>Remote SQL</span>
-                  </button>
+                  )}
                 </div>
               </div>
-
-              {settings.databaseMode === DatabaseMode.FIREBASE ? (
-                <div className="space-y-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-sm font-black text-gray-800 uppercase tracking-wider">Firebase Settings</h3>
-                    </div>
-                    <button 
-                      onClick={handleResetFirebase}
-                      className="px-4 py-2 bg-red-50 text-red-600 rounded-xl text-[10px] font-black uppercase border border-red-100 hover:bg-red-600 hover:text-white transition-all"
-                    >
-                      Reset to Default
-                    </button>
-                  </div>
-
-                  <div className="bg-orange-50 p-6 rounded-[30px] border border-orange-100 space-y-3">
-                    <div className="flex items-center gap-3 text-orange-600">
-                      <ShieldAlert size={20} />
-                      <h3 className="font-black uppercase tracking-wider text-xs">Important Instructions</h3>
-                    </div>
-                    <p className="text-[11px] text-orange-700 font-medium leading-relaxed">
-                      To use your own database, follow these steps:
-                      <br />1. Create a project on <a href="https://console.firebase.google.com" target="_blank" rel="noreferrer" className="underline font-bold">Firebase Console</a>.
-                      <br />2. Enable <span className="font-bold">Authentication</span> (Google Login) and <span className="font-bold">Firestore Database</span>.
-                      <br />3. Create a Web App and copy the configuration details below.
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-gray-400 uppercase">API Key</label>
-                      <input 
-                        type="text" 
-                        value={settings.customFirebase?.apiKey || ''}
-                        onChange={(e) => setSettings({ 
-                          ...settings, 
-                          customFirebase: { ...(settings.customFirebase || { authDomain: '', projectId: '', appId: '', apiKey: '' }), apiKey: e.target.value } 
-                        })}
-                        placeholder="AIzaSy..."
-                        className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-gray-400 uppercase">Project ID</label>
-                      <input 
-                        type="text" 
-                        value={settings.customFirebase?.projectId || ''}
-                        onChange={(e) => setSettings({ 
-                          ...settings, 
-                          customFirebase: { ...(settings.customFirebase || { authDomain: '', projectId: '', appId: '', apiKey: '' }), projectId: e.target.value } 
-                        })}
-                        placeholder="my-project-id"
-                        className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-gray-400 uppercase">Auth Domain</label>
-                      <input 
-                        type="text" 
-                        value={settings.customFirebase?.authDomain || ''}
-                        onChange={(e) => setSettings({ 
-                          ...settings, 
-                          customFirebase: { ...(settings.customFirebase || { authDomain: '', projectId: '', appId: '', apiKey: '' }), authDomain: e.target.value } 
-                        })}
-                        placeholder="my-project.firebaseapp.com"
-                        className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-gray-400 uppercase">App ID</label>
-                      <input 
-                        type="text" 
-                        value={settings.customFirebase?.appId || ''}
-                        onChange={(e) => setSettings({ 
-                          ...settings, 
-                          customFirebase: { ...(settings.customFirebase || { authDomain: '', projectId: '', appId: '', apiKey: '' }), appId: e.target.value } 
-                        })}
-                        placeholder="1:123456789:web:abc123"
-                        className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-gray-400 uppercase">Database ID (Optional)</label>
-                      <input 
-                        type="text" 
-                        value={settings.customFirebase?.firestoreDatabaseId || ''}
-                        onChange={(e) => setSettings({ 
-                          ...settings, 
-                          customFirebase: { ...(settings.customFirebase || { authDomain: '', projectId: '', appId: '', apiKey: '' }), firestoreDatabaseId: e.target.value } 
-                        })}
-                        placeholder="(default)"
-                        className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
-                      />
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-sm font-black text-gray-800 uppercase tracking-wider">Remote SQL Settings</h3>
-                    </div>
-                  </div>
-
-                  <div className="bg-blue-50 p-6 rounded-[30px] border border-blue-100 space-y-3">
-                    <div className="flex items-center gap-3 text-blue-600">
-                      <Server size={20} />
-                      <h3 className="font-black uppercase tracking-wider text-xs">SQL Configuration</h3>
-                    </div>
-                    <p className="text-[11px] text-blue-700 font-medium leading-relaxed">
-                      Enter your remote MySQL/PostgreSQL details. The backend will use these to connect.
-                      <br /><span className="font-bold">Note:</span> Ensure your database allows connections from this server's IP.
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-gray-400 uppercase">Host</label>
-                      <input 
-                        type="text" 
-                        value={settings.sqlConfig?.host || ''}
-                        onChange={(e) => setSettings({ 
-                          ...settings, 
-                          sqlConfig: { ...(settings.sqlConfig || { host: '', user: '', database: '', password: '', port: 3306 }), host: e.target.value } 
-                        })}
-                        placeholder="localhost or IP"
-                        className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-gray-400 uppercase">Database Name</label>
-                      <input 
-                        type="text" 
-                        value={settings.sqlConfig?.database || ''}
-                        onChange={(e) => setSettings({ 
-                          ...settings, 
-                          sqlConfig: { ...(settings.sqlConfig || { host: '', user: '', database: '', password: '', port: 3306 }), database: e.target.value } 
-                        })}
-                        placeholder="my_database"
-                        className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-gray-400 uppercase">Username</label>
-                      <input 
-                        type="text" 
-                        value={settings.sqlConfig?.user || ''}
-                        onChange={(e) => setSettings({ 
-                          ...settings, 
-                          sqlConfig: { ...(settings.sqlConfig || { host: '', user: '', database: '', password: '', port: 3306 }), user: e.target.value } 
-                        })}
-                        placeholder="root"
-                        className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-gray-400 uppercase">Password</label>
-                      <input 
-                        type="password" 
-                        value={settings.sqlConfig?.password || ''}
-                        onChange={(e) => setSettings({ 
-                          ...settings, 
-                          sqlConfig: { ...(settings.sqlConfig || { host: '', user: '', database: '', password: '', port: 3306 }), password: e.target.value } 
-                        })}
-                        placeholder="********"
-                        className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-gray-400 uppercase">Port</label>
-                      <input 
-                        type="number" 
-                        value={settings.sqlConfig?.port || 3306}
-                        onChange={(e) => setSettings({ 
-                          ...settings, 
-                          sqlConfig: { ...(settings.sqlConfig || { host: '', user: '', database: '', password: '', port: 3306 }), port: parseInt(e.target.value) } 
-                        })}
-                        placeholder="3306"
-                        className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <button 
-                onClick={handleSaveDatabase}
-                className="w-full bg-[#ff0000] text-white py-4 rounded-2xl font-black shadow-xl shadow-red-100 active:scale-95 transition-transform flex items-center justify-center gap-2"
-              >
-                <Save size={20} /> Save Database Configuration
-              </button>
             </div>
           )}
 

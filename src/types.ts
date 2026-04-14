@@ -42,19 +42,6 @@ export interface UserProfile {
   createdAt: string;
 }
 
-export enum DatabaseMode {
-  FIREBASE = 'firebase',
-  SQL = 'sql',
-}
-
-export interface SqlConfig {
-  host: string;
-  user: string;
-  password?: string;
-  database: string;
-  port?: number;
-}
-
 export interface FirebaseConfig {
   apiKey: string;
   authDomain: string;
@@ -76,8 +63,6 @@ export interface SystemSettings {
   supportEmail?: string;
   supportChannel?: string;
   customFirebase?: FirebaseConfig;
-  databaseMode: DatabaseMode;
-  sqlConfig?: SqlConfig;
 }
 
 export interface Plan {
@@ -87,6 +72,18 @@ export interface Plan {
   dailyIncome: number;
   validityDays: number;
   imageUrl: string;
+}
+
+export interface Coupon {
+  id: string;
+  code: string;
+  rewardAmount: number;
+  usageLimit: number;
+  usedCount: number;
+  expiryDate: string;
+  isActive: boolean;
+  usedBy: string[];
+  createdAt: string;
 }
 
 export interface Investment {
@@ -109,6 +106,7 @@ export interface Transaction {
   status: TransactionStatus;
   paymentMethod?: string;
   utr?: string;
+  description?: string;
   bankDetails?: {
     holderName: string;
     accountNo: string;

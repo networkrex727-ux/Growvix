@@ -3,8 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'r
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from './firebase';
-import { DatabaseService } from './services/DatabaseService';
-import { UserProfile, UserRole, DatabaseMode } from './types';
+import { UserProfile, UserRole } from './types';
 import { handleFirestoreError, OperationType } from './lib/error-handler';
 
 // Components
@@ -18,6 +17,7 @@ import Register from './pages/Register';
 import Recharge from './pages/Recharge';
 import Withdraw from './pages/Withdraw';
 import CheckIn from './pages/CheckIn';
+import RedeemCode from './pages/RedeemCode';
 import History from './pages/History';
 import Support from './pages/Support';
 import About from './pages/About';
@@ -100,40 +100,32 @@ const AppLayout: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-white">
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={location.pathname}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -10 }}
-          transition={{ duration: 0.2 }}
-          className="pb-24"
-        >
-          <Routes>
-            <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>} />
-            <Route path="/product" element={<ProtectedRoute><Product /></ProtectedRoute>} />
-            <Route path="/team" element={<ProtectedRoute><Team /></ProtectedRoute>} />
-            <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-            <Route path="/recharge" element={<ProtectedRoute><Recharge /></ProtectedRoute>} />
-            <Route path="/withdraw" element={<ProtectedRoute><Withdraw /></ProtectedRoute>} />
-            <Route path="/check-in" element={<ProtectedRoute><CheckIn /></ProtectedRoute>} />
-            <Route path="/history" element={<ProtectedRoute><History /></ProtectedRoute>} />
-            <Route path="/support" element={<ProtectedRoute><Support /></ProtectedRoute>} />
-            <Route path="/about" element={<ProtectedRoute><About /></ProtectedRoute>} />
-            <Route path="/rules" element={<ProtectedRoute><Rules /></ProtectedRoute>} />
-            <Route path="/my-investments" element={<ProtectedRoute><MyInvestments /></ProtectedRoute>} />
-            <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
-            <Route path="/checkout" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />
-            <Route path="/admin" element={<ProtectedRoute adminOnly><AdminDashboard /></ProtectedRoute>} />
-            <Route path="/admin/add-plan" element={<ProtectedRoute adminOnly><AdminAddPlan /></ProtectedRoute>} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
-            <Route path="/forgot-password" element={<ForgotPassword />} />
-            <Route path="/404" element={<NotFound />} />
-            <Route path="*" element={<Navigate to="/404" replace />} />
-          </Routes>
-        </motion.div>
-      </AnimatePresence>
+      <div className="pb-20">
+        <Routes>
+          <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+          <Route path="/product" element={<ProtectedRoute><Product /></ProtectedRoute>} />
+          <Route path="/team" element={<ProtectedRoute><Team /></ProtectedRoute>} />
+          <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+          <Route path="/recharge" element={<ProtectedRoute><Recharge /></ProtectedRoute>} />
+          <Route path="/withdraw" element={<ProtectedRoute><Withdraw /></ProtectedRoute>} />
+          <Route path="/check-in" element={<ProtectedRoute><CheckIn /></ProtectedRoute>} />
+          <Route path="/redeem-code" element={<ProtectedRoute><RedeemCode /></ProtectedRoute>} />
+          <Route path="/history" element={<ProtectedRoute><History /></ProtectedRoute>} />
+          <Route path="/support" element={<ProtectedRoute><Support /></ProtectedRoute>} />
+          <Route path="/about" element={<ProtectedRoute><About /></ProtectedRoute>} />
+          <Route path="/rules" element={<ProtectedRoute><Rules /></ProtectedRoute>} />
+          <Route path="/my-investments" element={<ProtectedRoute><MyInvestments /></ProtectedRoute>} />
+          <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
+          <Route path="/checkout" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />
+          <Route path="/admin" element={<ProtectedRoute adminOnly><AdminDashboard /></ProtectedRoute>} />
+          <Route path="/admin/add-plan" element={<ProtectedRoute adminOnly><AdminAddPlan /></ProtectedRoute>} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/404" element={<NotFound />} />
+          <Route path="*" element={<Navigate to="/404" replace />} />
+        </Routes>
+      </div>
       {showNav && <BottomNav />}
     </div>
   );
@@ -145,38 +137,20 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    DatabaseService.init();
-
     const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       if (firebaseUser) {
-        // Check database mode
-        const mode = DatabaseService.getMode();
-        
-        if (mode === DatabaseMode.SQL) {
-          // For SQL, we do a periodic fetch or single fetch for now
-          const fetchProfile = async () => {
-            const p = await DatabaseService.getUserProfile(firebaseUser.uid);
-            setProfile(p);
-            setLoading(false);
-          };
-          fetchProfile();
-          // Poll every 10 seconds for profile updates in SQL mode
-          const interval = setInterval(fetchProfile, 10000);
-          return () => clearInterval(interval);
-        } else {
-          // Listen to profile changes in Firebase
-          const unsubscribeProfile = onSnapshot(doc(db, 'users', firebaseUser.uid), (docSnap) => {
-            if (docSnap.exists()) {
-              setProfile(docSnap.data() as UserProfile);
-            }
-            setLoading(false);
-          }, (error) => {
-            handleFirestoreError(error, OperationType.GET, `users/${firebaseUser.uid}`);
-            setLoading(false);
-          });
-          return () => unsubscribeProfile();
-        }
+        // Listen to profile changes in Firebase
+        const unsubscribeProfile = onSnapshot(doc(db, 'users', firebaseUser.uid), (docSnap) => {
+          if (docSnap.exists()) {
+            setProfile(docSnap.data() as UserProfile);
+          }
+          setLoading(false);
+        }, (error) => {
+          handleFirestoreError(error, OperationType.GET, `users/${firebaseUser.uid}`);
+          setLoading(false);
+        });
+        return () => unsubscribeProfile();
       } else {
         setProfile(null);
         setLoading(false);
