@@ -12,20 +12,23 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Load Firebase Config for server initialization
-const firebaseConfigPath = path.join(process.cwd(), "firebase-applet-config.json");
-const firebaseConfig = JSON.parse(fs.readFileSync(firebaseConfigPath, "utf-8"));
-
-// Initialize Firebase Admin
-if (!admin.apps.length) {
-  admin.initializeApp({
-    projectId: firebaseConfig.projectId,
-  });
+let db: admin.firestore.Firestore;
+try {
+  const firebaseConfigPath = path.join(process.cwd(), "firebase-applet-config.json");
+  if (fs.existsSync(firebaseConfigPath)) {
+    const firebaseConfig = JSON.parse(fs.readFileSync(firebaseConfigPath, "utf-8"));
+    if (!admin.apps.length) {
+      admin.initializeApp({
+        projectId: firebaseConfig.projectId,
+      });
+    }
+    db = admin.firestore();
+  } else {
+    console.warn("firebase-applet-config.json not found. Firestore will not be available.");
+  }
+} catch (error) {
+  console.error("Firebase Admin Initialization Error:", error);
 }
-
-const db = admin.firestore();
-// If a specific database ID is provided, we should use it. 
-// Note: In firebase-admin, you can't easily switch databaseId on the fly without getFirestore() from 'firebase-admin/firestore'
-// But for AI Studio, the default project firestore is usually what's used.
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
@@ -66,7 +69,7 @@ async function startServer() {
           }
           
           // Basic IPv4/IPv6 validation
-          if (foundIp && foundIp.length >= 7 && foundIp.includes('.')) {
+          if (foundIp && foundIp.length >= 7 && (foundIp.includes('.') || foundIp.includes(':'))) {
             ip = foundIp;
             break;
           }
@@ -84,6 +87,7 @@ async function startServer() {
   app.post("/api/db-config", async (req, res) => {
     const { config } = req.body;
     try {
+      if (!db) throw new Error("Firestore not initialized");
       await db.collection("system").doc("dbConfig").set(config, { merge: true });
       res.json({ success: true });
     } catch (error: any) {
@@ -94,6 +98,7 @@ async function startServer() {
 
   app.get("/api/db-config", async (req, res) => {
     try {
+      if (!db) throw new Error("Firestore not initialized");
       const docSnap = await db.collection("system").doc("dbConfig").get();
       res.json(docSnap.exists ? docSnap.data() : {});
     } catch (error: any) {
@@ -255,11 +260,19 @@ async function startServer() {
     return app;
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  const server = app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
+  });
+
+  server.on('error', (err) => {
+    console.error("Server Listen Error:", err);
   });
   
   return app;
 }
 
-export default startServer();
+startServer().catch(err => {
+  console.error("Failed to start server:", err);
+});
+
+export default startServer;
