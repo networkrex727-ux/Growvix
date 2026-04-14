@@ -4,9 +4,10 @@ import { db } from '../firebase';
 import { Transaction, TransactionStatus, TransactionType, UserProfile, SystemSettings, Notification, Plan, InvestmentStatus, Coupon } from '../types';
 import { handleFirestoreError, OperationType } from '../lib/error-handler';
 import { motion, AnimatePresence } from 'motion/react';
-import { Settings, Users, ArrowUpCircle, ArrowDownCircle, CheckCircle2, XCircle, Clock, Search, Filter, ShieldAlert, ShieldCheck, Edit3, Save, Globe, Smartphone, Banknote, Bell, MoreVertical, LayoutDashboard, MessageSquare, Send, Mail, Phone, Headset, Camera, ShoppingBag, Ticket, Trash2, Plus } from 'lucide-react';
+import { Settings, Users, ArrowUpCircle, ArrowDownCircle, CheckCircle2, XCircle, Clock, Search, Filter, ShieldAlert, ShieldCheck, Edit3, Save, Globe, Smartphone, Banknote, Bell, MoreVertical, LayoutDashboard, MessageSquare, Send, Mail, Phone, Headset, Camera, ShoppingBag, Ticket, Trash2, Plus, Database, Server, HardDrive, Terminal, Info } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 
 const AdminDashboard: React.FC = () => {
   const { showToast } = useToast();
@@ -26,7 +27,7 @@ const AdminDashboard: React.FC = () => {
     customFirebase: JSON.parse(localStorage.getItem('GROWVIX_CUSTOM_FIREBASE') || 'null'),
   });
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'requests' | 'users' | 'settings' | 'overview' | 'plans' | 'coupons'>('overview');
+  const [activeTab, setActiveTab] = useState<'requests' | 'users' | 'settings' | 'overview' | 'plans' | 'coupons' | 'database'>('overview');
   const [plans, setPlans] = useState<Plan[]>([]);
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [newCoupon, setNewCoupon] = useState({ code: '', rewardAmount: 0, usageLimit: 1, expiryDate: '' });
@@ -38,6 +39,27 @@ const AdminDashboard: React.FC = () => {
   const [editBalances, setEditBalances] = useState({ deposit: 0, withdrawable: 0, hasRecharged: false });
   const [searchQuery, setSearchQuery] = useState('');
   const [showMenu, setShowMenu] = useState(false);
+  
+  const [serverIp, setServerIp] = useState<string>('Loading...');
+  const [dbConfig, setDbConfig] = useState({
+    type: 'firebase',
+    sqlitePath: './database.sqlite',
+    host: 'localhost',
+    port: '3306',
+    user: 'root',
+    password: '',
+    database: 'growvix_db'
+  });
+
+  useEffect(() => {
+    // Fetch Server IP
+    axios.get('/api/server-info').then(res => setServerIp(res.data.ip)).catch(() => setServerIp('Error fetching IP'));
+    
+    // Fetch DB Config
+    axios.get('/api/db-config').then(res => {
+      if (res.data && res.data.type) setDbConfig(res.data);
+    });
+  }, []);
 
   useEffect(() => {
     // Listen to pending transactions
@@ -338,7 +360,7 @@ const AdminDashboard: React.FC = () => {
 
   const handleSaveSettings = async () => {
     try {
-      const settingsToSave = {
+      const settingsToSave: SystemSettings = {
         adminUpi: settings.adminUpi || '',
         websiteUrl: settings.websiteUrl || window.location.origin,
         minWithdrawal: settings.minWithdrawal || 0,
@@ -348,10 +370,19 @@ const AdminDashboard: React.FC = () => {
         supportWhatsApp: settings.supportWhatsApp || '',
         supportEmail: settings.supportEmail || '',
         supportChannel: settings.supportChannel || '',
+        customFirebase: settings.customFirebase || undefined,
       };
 
       await setDoc(doc(db, 'system', 'settings'), settingsToSave, { merge: true });
-      showToast('Settings saved successfully!', 'success');
+      
+      // Also update localStorage if customFirebase is provided
+      if (settings.customFirebase) {
+        localStorage.setItem('GROWVIX_CUSTOM_FIREBASE', JSON.stringify(settings.customFirebase));
+      } else {
+        localStorage.removeItem('GROWVIX_CUSTOM_FIREBASE');
+      }
+
+      showToast('Settings saved successfully! The app will use the new configuration on next reload.', 'success');
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'system/settings');
       showToast('Failed to save settings', 'error');
@@ -515,6 +546,7 @@ const AdminDashboard: React.FC = () => {
                         { id: 'users', label: 'Users', icon: Users },
                         { id: 'plans', label: 'Manage Plans', icon: ShoppingBag },
                         { id: 'coupons', label: 'Coupons', icon: Ticket },
+                        { id: 'database', label: 'Database', icon: Database },
                         { id: 'add-plan', label: 'Add Plan', icon: Camera, action: () => navigate('/admin/add-plan') },
                         { id: 'settings', label: 'Settings', icon: Settings },
                       ].map((item) => (
@@ -780,6 +812,227 @@ const AdminDashboard: React.FC = () => {
             </div>
           )}
 
+          {activeTab === 'database' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-black text-gray-800 tracking-tight">Database Management</h2>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Switch between Firebase and SQL Databases</p>
+                </div>
+              </div>
+
+              {/* Server Info Card */}
+              <div className="bg-gradient-to-br from-gray-900 to-black p-10 rounded-[40px] shadow-2xl relative overflow-hidden border border-white/10">
+                <div className="absolute -right-20 -top-20 opacity-20 rotate-12">
+                  <Globe size={240} className="text-blue-500" />
+                </div>
+                <div className="relative z-10 space-y-8">
+                  <div className="flex items-center gap-6">
+                    <div className="w-20 h-20 bg-blue-500/20 backdrop-blur-xl rounded-3xl flex items-center justify-center text-blue-400 border border-blue-500/30 shadow-[0_0_30px_rgba(59,130,246,0.2)]">
+                      <Server size={40} />
+                    </div>
+                    <div>
+                      <p className="text-xs text-blue-400 font-black uppercase tracking-[0.2em] mb-1">Website Public IP Address</p>
+                      <h2 className="text-5xl font-black text-white tracking-tighter">{serverIp}</h2>
+                      <div className="flex items-center gap-2 mt-3">
+                        <div className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(34,197,94,0.5)]"></div>
+                        <p className="text-xs text-green-400 font-bold uppercase tracking-wider">Server is Online & Accessible</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex flex-wrap gap-4">
+                    <button 
+                      onClick={() => {
+                        navigator.clipboard.writeText(serverIp);
+                        showToast("IP copied to clipboard!", "success");
+                      }}
+                      className="bg-white text-black px-10 py-5 rounded-2xl font-black text-sm uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-xl"
+                    >
+                      Copy IP Address
+                    </button>
+                    <div className="flex items-center gap-3 px-6 py-4 bg-white/5 backdrop-blur-md rounded-2xl border border-white/10">
+                      <Info size={18} className="text-blue-400" />
+                      <p className="text-[11px] font-bold text-gray-300">Use this IP for Remote MySQL in cPanel</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Introduction & Guide */}
+              <div className="bg-white p-10 rounded-[40px] border border-gray-100 shadow-sm space-y-8">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-orange-100 rounded-2xl flex items-center justify-center text-orange-600">
+                      <Info size={24} />
+                    </div>
+                    <h3 className="text-xl font-black text-gray-900 uppercase tracking-tight">Introduction: Remote SQL Setup</h3>
+                  </div>
+                  <p className="text-sm text-gray-500 font-medium leading-relaxed">
+                    To use a Remote SQL database (like MySQL from your cPanel), you must first authorize this website's IP address on your hosting server. This ensures a secure connection between the application and your database.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="p-6 bg-gray-50 rounded-[30px] border border-gray-100 space-y-4 hover:border-blue-200 transition-colors group">
+                    <div className="w-10 h-10 bg-gray-900 text-white rounded-2xl flex items-center justify-center text-sm font-black group-hover:scale-110 transition-transform">1</div>
+                    <h4 className="font-black text-gray-800 uppercase text-xs tracking-wider">Authorize IP</h4>
+                    <p className="text-[11px] font-bold text-gray-600 leading-relaxed">Login to cPanel, find <span className="text-[#ff0000]">"Remote MySQL"</span>, and add the <span className="text-[#ff0000]">Server IP</span> shown above.</p>
+                  </div>
+                  <div className="p-6 bg-gray-50 rounded-[30px] border border-gray-100 space-y-4 hover:border-blue-200 transition-colors group">
+                    <div className="w-10 h-10 bg-gray-900 text-white rounded-2xl flex items-center justify-center text-sm font-black group-hover:scale-110 transition-transform">2</div>
+                    <h4 className="font-black text-gray-800 uppercase text-xs tracking-wider">Configure DB</h4>
+                    <p className="text-[11px] font-bold text-gray-600 leading-relaxed">Enter your MySQL <span className="text-[#ff0000]">Host, Username, Password</span>, and <span className="text-[#ff0000]">Database Name</span> in the form below.</p>
+                  </div>
+                  <div className="p-6 bg-gray-50 rounded-[30px] border border-gray-100 space-y-4 hover:border-blue-200 transition-colors group">
+                    <div className="w-10 h-10 bg-gray-900 text-white rounded-2xl flex items-center justify-center text-sm font-black group-hover:scale-110 transition-transform">3</div>
+                    <h4 className="font-black text-gray-800 uppercase text-xs tracking-wider">Install Tables</h4>
+                    <p className="text-[11px] font-bold text-gray-600 leading-relaxed">Click <span className="text-[#ff0000]">"Save Config"</span> then <span className="text-[#ff0000]">"Install Tables"</span> to initialize your database structure.</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Database Type Selector */}
+              <div className="grid grid-cols-2 gap-4">
+                <button 
+                  onClick={() => setDbConfig({ ...dbConfig, type: 'firebase' })}
+                  className={`p-6 rounded-[30px] border-2 transition-all flex flex-col items-center gap-3 ${dbConfig.type === 'firebase' ? 'border-[#ff0000] bg-red-50' : 'border-gray-100 bg-white hover:border-gray-200'}`}
+                >
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${dbConfig.type === 'firebase' ? 'bg-[#ff0000] text-white' : 'bg-gray-100 text-gray-400'}`}>
+                    <Globe size={24} />
+                  </div>
+                  <span className={`text-xs font-black uppercase tracking-widest ${dbConfig.type === 'firebase' ? 'text-gray-800' : 'text-gray-400'}`}>Firebase</span>
+                </button>
+                <button 
+                  onClick={() => setDbConfig({ ...dbConfig, type: 'mysql' })}
+                  className={`p-6 rounded-[30px] border-2 transition-all flex flex-col items-center gap-3 ${dbConfig.type === 'mysql' ? 'border-[#ff0000] bg-red-50' : 'border-gray-100 bg-white hover:border-gray-200'}`}
+                >
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${dbConfig.type === 'mysql' ? 'bg-[#ff0000] text-white' : 'bg-gray-100 text-gray-400'}`}>
+                    <Database size={24} />
+                  </div>
+                  <span className={`text-xs font-black uppercase tracking-widest ${dbConfig.type === 'mysql' ? 'text-gray-800' : 'text-gray-400'}`}>Remote SQL</span>
+                </button>
+              </div>
+
+              {/* SQL Configuration Form */}
+              {dbConfig.type === 'mysql' && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-gray-50 p-8 rounded-[35px] border border-gray-100 space-y-6"
+                >
+                  <div className="flex items-center gap-3 text-gray-800">
+                    <Terminal size={20} className="text-[#ff0000]" />
+                    <h3 className="font-black uppercase tracking-wider text-xs">MySQL Connection Details</h3>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-gray-400 uppercase">Host / IP</label>
+                      <input 
+                        type="text" 
+                        value={dbConfig.host}
+                        onChange={(e) => setDbConfig({ ...dbConfig, host: e.target.value })}
+                        placeholder="localhost or 1.2.3.4"
+                        className="w-full bg-white border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-gray-400 uppercase">Port</label>
+                      <input 
+                        type="text" 
+                        value={dbConfig.port}
+                        onChange={(e) => setDbConfig({ ...dbConfig, port: e.target.value })}
+                        placeholder="3306"
+                        className="w-full bg-white border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-gray-400 uppercase">Username</label>
+                      <input 
+                        type="text" 
+                        value={dbConfig.user}
+                        onChange={(e) => setDbConfig({ ...dbConfig, user: e.target.value })}
+                        placeholder="db_user"
+                        className="w-full bg-white border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-gray-400 uppercase">Password</label>
+                      <input 
+                        type="password" 
+                        value={dbConfig.password}
+                        onChange={(e) => setDbConfig({ ...dbConfig, password: e.target.value })}
+                        placeholder="••••••••"
+                        className="w-full bg-white border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
+                      />
+                    </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <label className="text-[10px] font-black text-gray-400 uppercase">Database Name</label>
+                      <input 
+                        type="text" 
+                        value={dbConfig.database}
+                        onChange={(e) => setDbConfig({ ...dbConfig, database: e.target.value })}
+                        placeholder="growvix_db"
+                        className="w-full bg-white border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex gap-4 pt-4">
+                    <button 
+                      onClick={async () => {
+                        setProcessing('db-save');
+                        try {
+                          await axios.post('/api/db-config', { config: dbConfig });
+                          showToast("Database configuration saved!", "success");
+                        } catch (err) {
+                          showToast("Failed to save config", "error");
+                        } finally {
+                          setProcessing(null);
+                        }
+                      }}
+                      disabled={processing === 'db-save'}
+                      className="flex-1 bg-gray-800 text-white py-4 rounded-2xl font-black shadow-lg active:scale-95 transition-transform disabled:opacity-50"
+                    >
+                      {processing === 'db-save' ? 'Saving...' : 'Save Config'}
+                    </button>
+                    <button 
+                      onClick={async () => {
+                        if (!window.confirm("This will create all necessary tables in your remote database. Continue?")) return;
+                        setProcessing('db-install');
+                        try {
+                          const res = await axios.post('/api/db-install', { config: dbConfig });
+                          showToast(res.data.message, "success");
+                        } catch (err: any) {
+                          showToast(err.response?.data?.error || "Installation failed", "error");
+                        } finally {
+                          setProcessing(null);
+                        }
+                      }}
+                      disabled={processing === 'db-install'}
+                      className="flex-1 bg-[#ff0000] text-white py-4 rounded-2xl font-black shadow-lg shadow-red-100 active:scale-95 transition-transform disabled:opacity-50"
+                    >
+                      {processing === 'db-install' ? 'Installing...' : 'Install Tables'}
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+
+              {dbConfig.type === 'firebase' && (
+                <div className="bg-green-50 p-8 rounded-[35px] border border-green-100 text-center space-y-4">
+                  <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center text-green-500 mx-auto shadow-sm">
+                    <ShieldCheck size={32} />
+                  </div>
+                  <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest">Firebase Active</h3>
+                  <p className="text-xs text-gray-500 font-medium max-w-xs mx-auto">
+                    The application is currently using Firebase Firestore as its primary database. No additional configuration is needed.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
           {activeTab === 'settings' && (
             <div className="space-y-6 p-2">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -902,6 +1155,98 @@ const AdminDashboard: React.FC = () => {
               >
                 <Save size={20} /> Save System Settings
               </button>
+
+              <div className="pt-6 border-t border-gray-100 space-y-4">
+                <h3 className="text-xs font-black text-gray-800 uppercase tracking-widest flex items-center gap-2">
+                  <ShieldCheck size={14} className="text-[#ff0000]" /> Firebase Project Settings
+                </h3>
+                <p className="text-[10px] text-gray-400 font-bold">
+                  Change the Firebase project used by the application. Warning: Incorrect configuration will break the app.
+                </p>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase">API Key</label>
+                    <input 
+                      type="text" 
+                      value={settings.customFirebase?.apiKey || ''}
+                      onChange={(e) => setSettings({ 
+                        ...settings, 
+                        customFirebase: { ...(settings.customFirebase || { authDomain: '', projectId: '', appId: '' } as any), apiKey: e.target.value } 
+                      })}
+                      placeholder="AIzaSy..."
+                      className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase">Auth Domain</label>
+                    <input 
+                      type="text" 
+                      value={settings.customFirebase?.authDomain || ''}
+                      onChange={(e) => setSettings({ 
+                        ...settings, 
+                        customFirebase: { ...(settings.customFirebase || { apiKey: '', projectId: '', appId: '' } as any), authDomain: e.target.value } 
+                      })}
+                      placeholder="your-project.firebaseapp.com"
+                      className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase">Project ID</label>
+                    <input 
+                      type="text" 
+                      value={settings.customFirebase?.projectId || ''}
+                      onChange={(e) => setSettings({ 
+                        ...settings, 
+                        customFirebase: { ...(settings.customFirebase || { apiKey: '', authDomain: '', appId: '' } as any), projectId: e.target.value } 
+                      })}
+                      placeholder="your-project-id"
+                      className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase">App ID</label>
+                    <input 
+                      type="text" 
+                      value={settings.customFirebase?.appId || ''}
+                      onChange={(e) => setSettings({ 
+                        ...settings, 
+                        customFirebase: { ...(settings.customFirebase || { apiKey: '', authDomain: '', projectId: '' } as any), appId: e.target.value } 
+                      })}
+                      placeholder="1:1234567890:web:..."
+                      className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase">Database ID (Optional)</label>
+                    <input 
+                      type="text" 
+                      value={settings.customFirebase?.firestoreDatabaseId || ''}
+                      onChange={(e) => setSettings({ 
+                        ...settings, 
+                        customFirebase: { ...(settings.customFirebase || { apiKey: '', authDomain: '', projectId: '', appId: '' } as any), firestoreDatabaseId: e.target.value } 
+                      })}
+                      placeholder="(default)"
+                      className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-xl py-3 px-4 outline-none font-bold text-gray-700"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => {
+                      if (window.confirm("Reset to default Firebase configuration?")) {
+                        setSettings({ ...settings, customFirebase: undefined });
+                        localStorage.removeItem('GROWVIX_CUSTOM_FIREBASE');
+                        showToast("Reset to default. Save settings to apply.", "info");
+                      }
+                    }}
+                    className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold text-[10px] uppercase active:bg-gray-200 transition-colors"
+                  >
+                    Reset to Default
+                  </button>
+                </div>
+              </div>
 
               <div className="pt-10 border-t border-red-100">
                 <div className="bg-red-50 p-6 rounded-[30px] border border-red-100 space-y-4">
