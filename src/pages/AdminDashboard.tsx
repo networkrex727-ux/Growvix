@@ -833,10 +833,14 @@ const AdminDashboard: React.FC = () => {
                     </div>
                     <div>
                       <p className="text-xs text-blue-400 font-black uppercase tracking-[0.2em] mb-1">Website Public IP Address</p>
-                      <h2 className="text-5xl font-black text-white tracking-tighter">{serverIp}</h2>
+                      <h2 className="text-5xl font-black text-white tracking-tighter">
+                        {serverIp === 'Unable to determine IP' ? 'IP Not Found' : serverIp}
+                      </h2>
                       <div className="flex items-center gap-2 mt-3">
-                        <div className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(34,197,94,0.5)]"></div>
-                        <p className="text-xs text-green-400 font-bold uppercase tracking-wider">Server is Online & Accessible</p>
+                        <div className={`w-2.5 h-2.5 ${serverIp === 'Unable to determine IP' ? 'bg-red-500' : 'bg-green-500'} rounded-full animate-pulse shadow-[0_0_10px_rgba(34,197,94,0.5)]`}></div>
+                        <p className={`text-xs ${serverIp === 'Unable to determine IP' ? 'text-red-400' : 'text-green-400'} font-bold uppercase tracking-wider`}>
+                          {serverIp === 'Unable to determine IP' ? 'Check Server Configuration' : 'Server is Online & Accessible'}
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -871,6 +875,13 @@ const AdminDashboard: React.FC = () => {
                   <p className="text-sm text-gray-500 font-medium leading-relaxed">
                     To use a Remote SQL database (like MySQL from your cPanel), you must first authorize this website's IP address on your hosting server. This ensures a secure connection between the application and your database.
                   </p>
+                  <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 flex items-start gap-3">
+                    <ShieldCheck size={18} className="text-blue-600 mt-0.5 shrink-0" />
+                    <p className="text-[11px] font-bold text-blue-800 leading-relaxed">
+                      <span className="uppercase tracking-widest text-[9px] block mb-1 opacity-70">Important Note for Vercel Users:</span>
+                      If you are deploying on Vercel, the IP address shown is dynamic and may change. For production, consider using a static hosting provider or a database that doesn't require IP allowlisting (like Firebase or Supabase).
+                    </p>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

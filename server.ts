@@ -43,23 +43,33 @@ async function startServer() {
   app.get("/api/server-info", async (req, res) => {
     try {
       const services = [
+        "https://api64.ipify.org?format=json",
         "https://api.ipify.org?format=json",
         "https://ifconfig.me/all.json",
-        "https://icanhazip.com"
+        "https://icanhazip.com",
+        "https://ident.me",
+        "https://v4.ident.me"
       ];
       
       let ip = "Unable to determine IP";
       for (const service of services) {
         try {
-          const response = await axios.get(service, { timeout: 3000 });
+          const response = await axios.get(service, { timeout: 5000 });
+          let foundIp = "";
+          
           if (typeof response.data === 'string') {
-            ip = response.data.trim();
+            foundIp = response.data.trim();
           } else if (response.data && response.data.ip) {
-            ip = response.data.ip;
+            foundIp = response.data.ip;
           } else if (response.data && response.data.ip_addr) {
-            ip = response.data.ip_addr;
+            foundIp = response.data.ip_addr;
           }
-          if (ip && ip !== "Unable to determine IP" && ip.split('.').length === 4) break;
+          
+          // Basic IPv4/IPv6 validation
+          if (foundIp && foundIp.length >= 7 && foundIp.includes('.')) {
+            ip = foundIp;
+            break;
+          }
         } catch (e) {
           continue;
         }
@@ -225,7 +235,6 @@ async function startServer() {
     res.json({ success: true, message: "Income claimed successfully" });
   });
 
-  // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -234,15 +243,23 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
+    if (fs.existsSync(distPath)) {
+      app.use(express.static(distPath));
+      app.get("*", (req, res) => {
+        res.sendFile(path.join(distPath, "index.html"));
+      });
+    }
+  }
+
+  if (process.env.VERCEL) {
+    return app;
   }
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
+  
+  return app;
 }
 
-startServer();
+export default startServer();
