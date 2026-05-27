@@ -53,7 +53,7 @@ const CheckIn: React.FC = () => {
       });
 
       showToast(`Successfully checked in! You earned ₹${reward}`, "success");
-      navigate('/');
+      navigate('/dashboard');
     } catch (error) {
       console.error("Check-in error:", error);
       showToast("Failed to check in. Please try again.", "error");

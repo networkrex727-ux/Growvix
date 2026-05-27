@@ -1,4 +1,3 @@
-import { auth } from '../firebase';
 
 export enum OperationType {
   CREATE = 'create',
@@ -15,34 +14,18 @@ export interface FirestoreErrorInfo {
   path: string | null;
   authInfo: {
     userId: string | undefined;
-    email: string | null | undefined;
-    emailVerified: boolean | undefined;
-    isAnonymous: boolean | undefined;
-    tenantId: string | null | undefined;
-    providerInfo: {
-      providerId: string;
-      displayName: string | null;
-      email: string | null;
-      photoUrl: string | null;
-    }[];
+    phone: string | undefined;
   }
 }
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  // Since this is a client-side utility, it's hard to get the latest user without context/hooks
+  // We'll just log the error for now or try to get from localStorage if needed
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
-      providerInfo: auth.currentUser?.providerData.map(provider => ({
-        providerId: provider.providerId,
-        displayName: provider.displayName,
-        email: provider.email,
-        photoUrl: provider.photoURL
-      })) || []
+      userId: 'unknown',
+      phone: 'unknown',
     },
     operationType,
     path

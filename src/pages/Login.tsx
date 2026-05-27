@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../firebase';
+import { useAuth } from '../App';
 import { useToast } from '../context/ToastContext';
 import { motion } from 'motion/react';
-import { Phone, Lock, Eye, EyeOff, ArrowRight, Mail } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, ArrowRight, ShieldCheck } from 'lucide-react';
 
 const Login: React.FC = () => {
+  const { login } = useAuth();
   const { showToast } = useToast();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -16,14 +16,29 @@ const Login: React.FC = () => {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!email.includes('@')) {
+      showToast("Please enter a valid email address", "error");
+      return;
+    }
     setLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, email.toLowerCase().trim(), password);
-      showToast("Login successful!", "success");
-      navigate('/');
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        login(data.token, data.user);
+        showToast("Login successful!", "success");
+        navigate('/dashboard');
+      } else {
+        showToast(data.message || "Invalid credentials", "error");
+      }
     } catch (error: any) {
       console.error("Login error:", error);
-      showToast(error.message || "Invalid email or password", "error");
+      showToast("Connection failed", "error");
     } finally {
       setLoading(false);
     }
@@ -54,7 +69,9 @@ const Login: React.FC = () => {
           />
           <div className="text-center">
             <h1 className="text-3xl font-black text-gray-800 tracking-tight">Growvix</h1>
-            <p className="text-sm text-gray-400 font-medium mt-1">Grow your wealth with us</p>
+            <p className="text-sm text-gray-400 font-medium mt-1 uppercase tracking-widest flex items-center justify-center gap-2">
+              <ShieldCheck size={14} className="text-[#ff0000]" /> Secure Login
+            </p>
           </div>
         </div>
 

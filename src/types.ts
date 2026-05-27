@@ -26,8 +26,9 @@ export enum InvestmentStatus {
 
 export interface UserProfile {
   uid: string;
-  phone: string;
   email: string;
+  phone?: string;
+  name?: string;
   balance: number; // Total balance (sum of deposit and withdrawable)
   depositBalance: number; // Non-withdrawable (from recharges)
   withdrawableBalance: number; // Withdrawable (from income, bonuses, referrals)

@@ -140,12 +140,14 @@ const AdminDashboard: React.FC = () => {
         createdAt: serverTimestamp(),
       });
 
-      // 2. Send Email via API
-      await fetch('/api/send-notification-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, subject: title, message }),
-      });
+      // 2. Send Email via API if email exists
+      if (email && email.includes('@')) {
+        await fetch('/api/send-notification-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, subject: title, message }),
+        });
+      }
     } catch (error) {
       console.error("Failed to send notification:", error);
     }
@@ -204,7 +206,7 @@ const AdminDashboard: React.FC = () => {
                 type: TransactionType.REFERRAL,
                 status: TransactionStatus.COMPLETED,
                 createdAt: serverTimestamp(),
-                description: `LV${level} Referral commission from ${userData.phone || 'User'}`,
+                description: `LV${level} Referral commission from ${userData.email || 'User'}`,
               });
 
               // Find next level referrer
@@ -349,7 +351,7 @@ const AdminDashboard: React.FC = () => {
         await deleteDoc(doc(db, 'users', d.id));
       }
 
-      showToast("System data reset successfully! Note: User authentication accounts still exist in Firebase Auth and must be deleted manually if needed.", "success");
+      showToast("System data reset successfully! All non-admin user accounts and data have been cleared.", "success");
     } catch (error) {
       console.error("Reset error:", error);
       showToast("Reset failed: " + (error instanceof Error ? error.message : "Unknown error"), "error");
@@ -492,7 +494,7 @@ const AdminDashboard: React.FC = () => {
   );
 
   const filteredUsers = users.filter(u => 
-    u.phone.includes(searchQuery) || u.email.toLowerCase().includes(searchQuery.toLowerCase())
+    (u.email && u.email.toLowerCase().includes(searchQuery.toLowerCase())) || (u.name && u.name.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   return (
@@ -745,7 +747,7 @@ const AdminDashboard: React.FC = () => {
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                 <input 
                   type="text" 
-                  placeholder="Search by phone or email..."
+                  placeholder="Search by email..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full bg-gray-50 border-2 border-transparent focus:border-[#ff0000] rounded-2xl py-3 pl-12 pr-4 outline-none font-bold text-gray-700 transition-all"
@@ -767,11 +769,11 @@ const AdminDashboard: React.FC = () => {
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
-                            <p className="text-sm font-black text-gray-800">{u.phone}</p>
+                            <p className="text-sm font-black text-gray-800">{u.email}</p>
                             {u.isBanned && <span className="bg-red-500 text-white text-[8px] px-1.5 py-0.5 rounded-full font-black uppercase">Banned</span>}
                             {u.hasRecharged && <span className="bg-green-500 text-white text-[8px] px-1.5 py-0.5 rounded-full font-black uppercase">Recharged</span>}
                           </div>
-                          <p className="text-[10px] text-gray-400 font-medium">{u.email}</p>
+                          <p className="text-[10px] text-gray-400 font-medium">{u.email || "No Email"}</p>
                         </div>
                       </div>
                       <div className="flex gap-2">

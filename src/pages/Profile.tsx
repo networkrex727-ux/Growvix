@@ -1,22 +1,16 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { signOut } from 'firebase/auth';
-import { auth } from '../firebase';
 import { useAuth } from '../App';
 import { User, Wallet, ArrowUpCircle, ArrowDownCircle, Users, ShieldCheck, Info, Headset, LogOut, ChevronRight, Settings, TrendingUp, Bell, Ticket, Gift } from 'lucide-react';
 import { motion } from 'motion/react';
 
 const Profile: React.FC = () => {
-  const { profile, isAdmin } = useAuth();
+  const { profile, isAdmin, logout } = useAuth();
   const navigate = useNavigate();
 
   const handleLogout = async () => {
-    try {
-      await signOut(auth);
-      navigate('/login');
-    } catch (error) {
-      console.error("Logout error:", error);
-    }
+    logout();
+    navigate('/login');
   };
 
   const menuItems = [
@@ -48,7 +42,7 @@ const Profile: React.FC = () => {
           />
         </div>
         <div className="flex-1">
-          <h2 className="text-2xl font-bold text-gray-800">{profile?.phone || 'Guest User'}</h2>
+          <h2 className="text-2xl font-bold text-gray-800">{profile?.email || 'Guest User'}</h2>
           <div className="flex items-center gap-2 mt-1">
             <span className="bg-red-50 text-[#ff0000] px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider">
               {profile?.role || 'User'}

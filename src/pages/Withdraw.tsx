@@ -78,7 +78,7 @@ const Withdraw: React.FC = () => {
       });
 
       showToast(`Withdrawal request submitted! ₹${withdrawAmount} has been deducted from your balance and is pending approval.`, "success");
-      navigate('/');
+      navigate('/dashboard');
     } catch (error) {
       console.error("Withdrawal error:", error);
       showToast("Failed to submit request. Please try again.", "error");

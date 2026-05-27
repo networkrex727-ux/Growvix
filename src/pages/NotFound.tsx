@@ -56,7 +56,7 @@ const NotFound: React.FC = () => {
         className="flex flex-col w-full max-w-xs gap-3"
       >
         <button
-          onClick={() => navigate('/')}
+          onClick={() => navigate('/dashboard')}
           className="w-full bg-[#ff0000] text-white py-4 rounded-2xl font-black shadow-xl shadow-red-100 active:scale-95 transition-all flex items-center justify-center gap-2 uppercase text-sm tracking-widest"
         >
           <Home size={18} />

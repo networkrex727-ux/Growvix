@@ -11,7 +11,7 @@ function cn(...inputs: ClassValue[]) {
 
 const BottomNav: React.FC = () => {
   const navItems = [
-    { to: '/', icon: Home, label: 'Home' },
+    { to: '/dashboard', icon: Home, label: 'Home' },
     { to: '/product', icon: ShoppingBag, label: 'Product' },
     { to: '/team', icon: Users, label: 'Team' },
     { to: '/profile', icon: User, label: 'Profile' },

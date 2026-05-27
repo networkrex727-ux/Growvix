@@ -13,10 +13,14 @@ const CountdownTimer: React.FC<{ lastClaim: string; onComplete: () => void }> = 
 
   useEffect(() => {
     const calculate = () => {
-      const last = new Date(lastClaim).getTime();
-      const next = last + 24 * 60 * 60 * 1000;
-      const now = new Date().getTime();
-      const diff = next - now;
+      const now = new Date();
+      const istStr = now.toLocaleString("en-US", { timeZone: "Asia/Kolkata" });
+      const istDate = new Date(istStr);
+      
+      const nextMidnightIST = new Date(istDate);
+      nextMidnightIST.setHours(24, 0, 0, 0);
+      
+      const diff = nextMidnightIST.getTime() - istDate.getTime();
 
       if (diff <= 0) {
         setTimeLeft('00:00:00');
@@ -46,6 +50,22 @@ const CountdownTimer: React.FC<{ lastClaim: string; onComplete: () => void }> = 
       <span className="text-xs font-black text-[#ff0000] font-mono tracking-wider">{timeLeft}</span>
     </div>
   );
+};
+
+const getISTDateKey = (dateInput: string | Date | number) => {
+  const d = new Date(dateInput);
+  const istStr = d.toLocaleString("en-US", { timeZone: "Asia/Kolkata" });
+  const istDate = new Date(istStr);
+  const yyyy = istDate.getFullYear();
+  const mm = String(istDate.getMonth() + 1).padStart(2, '0');
+  const dd = String(istDate.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+const isNewISTDay = (lastClaimStr: string) => {
+  const todayKey = getISTDateKey(new Date());
+  const lastClaimKey = getISTDateKey(lastClaimStr);
+  return todayKey > lastClaimKey;
 };
 
 const MyInvestments: React.FC = () => {
@@ -80,13 +100,10 @@ const MyInvestments: React.FC = () => {
   const handleClaimIncome = useCallback(async (investment: Investment) => {
     if (!user || !profile || claiming.has(investment.id)) return;
 
-    // Check if 24 hours have passed since last claim
-    const lastClaim = new Date(investment.lastIncomeClaimed);
+    // Verify if it is a new IST day since the last claim
+    if (!isNewISTDay(investment.lastIncomeClaimed)) return;
+
     const now = new Date();
-    const hoursSinceLastClaim = (now.getTime() - lastClaim.getTime()) / (1000 * 60 * 60);
-
-    if (hoursSinceLastClaim < 24) return;
-
     setClaiming(prev => new Set(prev).add(investment.id));
     try {
       // 1. Update User Balance
@@ -128,10 +145,7 @@ const MyInvestments: React.FC = () => {
   useEffect(() => {
     if (investments.length > 0 && !loading) {
       investments.forEach(inv => {
-        const lastClaim = new Date(inv.lastIncomeClaimed);
-        const now = new Date();
-        const hoursSinceLastClaim = (now.getTime() - lastClaim.getTime()) / (1000 * 60 * 60);
-        if (hoursSinceLastClaim >= 24) {
+        if (isNewISTDay(inv.lastIncomeClaimed)) {
           handleClaimIncome(inv);
         }
       });
@@ -242,7 +256,7 @@ const MyInvestments: React.FC = () => {
                   <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
                   <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Auto-Claim Enabled</span>
                 </div>
-                <p className="text-[10px] font-black text-[#ff0000]">₹{inv.dailyIncome}/24h</p>
+                <p className="text-[10px] font-black text-[#ff0000]">₹{inv.dailyIncome} Daily</p>
               </div>
             </motion.div>
           ))
@@ -263,7 +277,7 @@ const MyInvestments: React.FC = () => {
       <div className="bg-orange-50 p-4 rounded-2xl flex gap-3 border border-orange-100">
         <Zap className="text-orange-500 shrink-0" size={20} />
         <p className="text-[10px] text-orange-700 font-medium leading-relaxed">
-          Auto-claim is active! Your daily income will be automatically added to your balance every 24 hours. Keep this page open or visit daily to ensure all earnings are processed.
+          Daily automatic income is active! Your daily plan income will be automatically credited to your balance at midnight (12:00 AM IST) every day.
         </p>
       </div>
     </div>
